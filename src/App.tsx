@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Provider } from 'react-redux'
 import { Toaster } from "./components/ui/toaster";
-import { ThemeProvider } from "./components/ThemeProvider";
 import { Toaster as Sonner } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { AuthProvider } from "./contexts/AuthContext";
@@ -36,13 +36,14 @@ import ProfilePage from "./pages/dashboard/ProfilePage";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { SiteContentProvider } from "./contexts/SiteContentContext";
 import SiteCustomizationPage from "./pages/dashboard/SiteCustomizationPage";
+import { store } from "./store/store";
 
 const queryClient = new QueryClient();
 
 const App = () => {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    <Provider store={store}>
+      <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <SiteContentProvider>
             <TooltipProvider>
@@ -161,8 +162,8 @@ const App = () => {
             </TooltipProvider>
           </SiteContentProvider>
         </AuthProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+      </QueryClientProvider>
+    </Provider>
   );
 };
 
