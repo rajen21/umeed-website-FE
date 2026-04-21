@@ -17,7 +17,7 @@ import {
     DialogTitle,
     DialogFooter,
 } from "../../components/ui/dialog";
-import { api } from "../../lib/api";
+import { mediaApi } from "../../services/mediaApi";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Loader2, Upload, Hash, FileText, Trash2 } from "lucide-react";
@@ -87,26 +87,9 @@ export function StudentForm({
             const fileExt = file.name.split(".").pop();
             const filePath = `${Math.random()}.${fileExt}`;
 
-            // Check if storage is available
-            if (!api.storage) {
-                toast.warning("Image upload is not available in demo mode");
-                return;
-            }
-
-            const { error: uploadError } = await api.storage
-                .from("student_avatars")
-                .upload(filePath, file);
-
-            if (uploadError) {
-                // Show warning but don't block - image is optional
-                toast.warning("Could not upload image. You can continue without a photo.");
-                console.warn("Upload error:", uploadError);
-                return;
-            }
-
-            const { data } = api.storage.from("student_avatars").getPublicUrl(filePath);
-
-            setFormData((prev) => ({ ...prev, image_url: data.publicUrl }));
+            const uploaded = await mediaApi.upload(file, filePath);
+            const publicUrl = mediaApi.getPublicUrl(uploaded.url);
+            setFormData((prev) => ({ ...prev, image_url: publicUrl }));
             toast.success("Image uploaded successfully!");
         } catch (error: any) {
             // Graceful failure - image is optional
@@ -142,23 +125,11 @@ export function StudentForm({
             const fileName = `${Math.random()}.${fileExt}`;
             const filePath = `${fileName}`;
 
-            // Check if storage is available
-            if (!api.storage) {
-                toast.warning("Storage not configured");
-                return;
-            }
-
-            const { error: uploadError } = await api.storage
-                .from("documents") // Use 'documents' bucket
-                .upload(filePath, file);
-
-            if (uploadError) throw uploadError;
-
-            const { data } = api.storage.from("documents").getPublicUrl(filePath);
-
+            const uploaded = await mediaApi.upload(file, filePath);
+            const publicUrl = mediaApi.getPublicUrl(uploaded.url);
             const newDoc = {
                 name: file.name,
-                url: data.publicUrl,
+                url: publicUrl,
                 type: fileExt || "file"
             };
 
