@@ -78,14 +78,14 @@ export function Navbar() {
                       <User className="w-4 h-4" />
                     </div>
                     <div className="flex flex-col items-start text-xs">
-                      <span className="font-medium">{user.user_metadata?.full_name?.split(' ')[0] || "User"}</span>
+                      <span className="font-medium">{user.fullName?.split(' ')[0] || "User"}</span>
                     </div>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel>
                     <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">{user.user_metadata?.full_name || "User"}</p>
+                      <p className="text-sm font-medium leading-none">{user.fullName || "User"}</p>
                       <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
                     </div>
                   </DropdownMenuLabel>
@@ -165,7 +165,7 @@ export function Navbar() {
                 {user ? (
                   <>
                     <div className="px-4 pb-2 border-b border-border/50 mb-2">
-                      <p className="text-sm font-medium">{user.user_metadata?.full_name || "User"}</p>
+                      <p className="text-sm font-medium">{user.fullName || "User"}</p>
                       <p className="text-xs text-muted-foreground">{user.email}</p>
                     </div>
                     <Button variant="outline" className="w-full justify-start gap-2" asChild>
