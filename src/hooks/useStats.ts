@@ -1,5 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { studentsApi } from "../services/studentsApi";
+import { volunteersApi } from "../services/volunteersApi";
+import { sessionsApi } from "../services/sessionsApi";
+import { applicationsApi } from "../services/applicationsApi";
+import { eventsApi } from "../services/eventsApi";
+import { noticesApi } from "../services/noticesApi";
+import { attendanceApi } from "../services/attendanceApi";
+import apiClient from "../lib/apiClient";
 import {
   subMonths,
   format,
@@ -13,38 +20,30 @@ export function useStats() {
   return useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
-      const [studentsRes, volunteersRes, sessionsRes, applicationsRes] =
-        await Promise.all([
-          api.from("students").select("id, status", { count: "exact" }),
-          api.from("volunteers").select("id, status", { count: "exact" }),
-          api.from("sessions").select("id, session_date", { count: "exact" }),
-          api
-            .from("volunteer_applications")
-            .select("id, status", { count: "exact" }),
-        ]);
+      const [students, volunteers, sessions, applications] = await Promise.all([
+        studentsApi.getAll(),
+        volunteersApi.getAll(),
+        sessionsApi.getAll(),
+        applicationsApi.getAll(),
+      ]);
 
-      const activeStudents =
-        studentsRes.data?.filter(
-          (s: { status: string }) => s.status === "active",
-        ).length || 0;
-      const activeVolunteers =
-        volunteersRes.data?.filter(
-          (v: { status: string }) => v.status === "approved",
-        ).length || 0;
-      const totalVolunteers = (volunteersRes as any).count || 0;
-      const totalSessions = (sessionsRes as any).count || 0;
-      const pendingApplications =
-        applicationsRes.data?.filter(
-          (a: { status: string }) => a.status === "pending",
-        ).length || 0;
+      const activeStudents = students.filter(
+        (s: any) => s.status === "active",
+      ).length;
+      const activeVolunteers = volunteers.filter(
+        (v: any) => v.status === "approved",
+      ).length;
+      const totalVolunteers = volunteers.length;
+      const totalSessions = sessions.length;
+      const pendingApplications = applications.filter(
+        (a: any) => a.status === "pending",
+      ).length;
 
-      // Get this month's sessions
       const now = new Date();
       const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const sessionsThisMonth =
-        sessionsRes.data?.filter(
-          (s: Session) => new Date(s.session_date) >= firstDayOfMonth,
-        ).length || 0;
+      const sessionsThisMonth = sessions.filter(
+        (s: Session) => new Date(s.session_date) >= firstDayOfMonth,
+      ).length;
 
       return {
         activeStudents,
@@ -62,11 +61,8 @@ export function useStudentGrowth() {
   return useQuery({
     queryKey: ["student-growth"],
     queryFn: async () => {
-      const startOfPeriod = subMonths(new Date(), 6);
-      const { data: students } = await api
-        .from("students")
-        .select("created_at")
-        .gte("created_at", startOfPeriod.toISOString());
+      const students = await studentsApi.getAll();
+      const sixMonthsAgo = subMonths(new Date(), 6);
 
       const last6Months = eachMonthOfInterval({
         start: subMonths(new Date(), 5),
@@ -78,17 +74,17 @@ export function useStudentGrowth() {
         const monthStart = startOfMonth(date);
         const monthEnd = endOfMonth(date);
 
-        const count =
-          students?.filter((s: { created_at?: string }) => {
-            if (!s.created_at) return false;
-            const created = new Date(s.created_at);
-            return created >= monthStart && created <= monthEnd;
-          }).length || 0;
+        const count = students.filter((s: any) => {
+          if (!s.created_at) return false;
+          const created = new Date(s.created_at);
+          return (
+            created >= monthStart &&
+            created <= monthEnd &&
+            created >= sixMonthsAgo
+          );
+        }).length;
 
-        return {
-          name: monthStr,
-          students: count,
-        };
+        return { name: monthStr, students: count };
       });
     },
   });
@@ -98,19 +94,14 @@ export function useSessionStats() {
   return useQuery({
     queryKey: ["session-stats-overview"],
     queryFn: async () => {
-      const { data: sessions, error } = await api
-        .from("sessions")
-        .select("session_date");
-
-      if (error) throw error;
+      const sessions = await sessionsApi.getAll();
 
       let completed = 0;
       let scheduled = 0;
       const now = new Date();
-      // Reset time to compare dates only
       now.setHours(0, 0, 0, 0);
 
-      sessions?.forEach((session: Session) => {
+      sessions.forEach((session: Session) => {
         const date = new Date(session.session_date);
         if (date < now) {
           completed++;
@@ -132,15 +123,13 @@ export function useUpcomingSessions(limit = 5) {
     queryKey: ["upcoming-sessions", limit],
     queryFn: async () => {
       const today = new Date().toISOString().split("T")[0];
-      const { data, error } = await api
-        .from("sessions")
-        .select("*")
-        .gte("session_date", today)
-        .order("session_date", { ascending: true })
-        .limit(limit);
-
-      if (error) throw error;
-      return data || [];
+      const sessions = await sessionsApi.getAll();
+      return sessions
+        .filter((s: Session) => s.session_date >= today)
+        .sort((a: Session, b: Session) =>
+          a.session_date.localeCompare(b.session_date),
+        )
+        .slice(0, limit);
     },
   });
 }
@@ -149,14 +138,13 @@ export function useRecentEvents(limit = 5) {
   return useQuery({
     queryKey: ["recent-events", limit],
     queryFn: async () => {
-      const { data, error } = await api
-        .from("events")
-        .select("*, event_media(url, media_type)")
-        .order("event_date", { ascending: false })
-        .limit(limit);
-
-      if (error) throw error;
-      return data || [];
+      const events = await eventsApi.getAll();
+      return events
+        .sort(
+          (a: any, b: any) =>
+            new Date(b.event_date).getTime() - new Date(a.event_date).getTime(),
+        )
+        .slice(0, limit);
     },
   });
 }
@@ -168,17 +156,19 @@ export function useRecentNotices(
   return useQuery({
     queryKey: ["recent-notices", limit, visibility],
     queryFn: async () => {
-      let q = api
-        .from("notices")
-        .select("*")
-        .order("published_date", { ascending: false })
-        .limit(limit);
-      if (visibility) {
-        q = q.eq("visibility", visibility);
-      }
-      const { data, error } = await q;
-      if (error) throw error;
-      return data || [];
+      const params = visibility ? { visibility } : undefined;
+      const notices = await noticesApi.getAll(params);
+      return notices
+        .sort((a: any, b: any) => {
+          const dateA = a.published_date
+            ? new Date(a.published_date).getTime()
+            : 0;
+          const dateB = b.published_date
+            ? new Date(b.published_date).getTime()
+            : 0;
+          return dateB - dateA;
+        })
+        .slice(0, limit);
     },
   });
 }
@@ -187,33 +177,34 @@ export function useAttendanceStats() {
   return useQuery({
     queryKey: ["attendance-stats"],
     queryFn: async () => {
-      const { data: sessions } = await api
-        .from("sessions")
-        .select("id, session_date")
-        .order("session_date", { ascending: false })
-        .limit(8);
+      const allSessions = await sessionsApi.getAll();
+      const sessions = allSessions
+        .sort(
+          (a: Session, b: Session) =>
+            new Date(b.session_date).getTime() -
+            new Date(a.session_date).getTime(),
+        )
+        .slice(0, 8)
+        .reverse();
 
-      if (!sessions?.length) return { chartData: [], avgAttendance: 0 };
+      if (!sessions.length) return { chartData: [], avgAttendance: 0 };
 
       const chartData = await Promise.all(
-        sessions.reverse().map(async (session: Session) => {
-          const { data: attendance } = await api
-            .from("student_attendance")
-            .select("status")
-            .eq("session_id", session.id);
-
-          const present =
-            attendance?.filter(
-              (a: { status: string }) => a.status === "present",
-            ).length || 0;
-          const total = attendance?.length || 1;
+        sessions.map(async (session: Session) => {
+          const attendance = await attendanceApi.getStudentAttendance({
+            session_id: session.id,
+          });
+          const present = attendance.filter(
+            (a: any) => a.status === "present",
+          ).length;
+          const total = attendance.length || 1;
           const rate = Math.round((present / total) * 100);
 
           return {
-            date: new Date((session as any).session_date).toLocaleDateString(
-              "en-US",
-              { month: "short", day: "numeric" },
-            ),
+            date: new Date(session.session_date).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            }),
             attendance: rate,
           };
         }),
@@ -236,70 +227,53 @@ export function useVolunteerStats(volunteerId: string | null) {
     queryKey: ["volunteer-dashboard-stats", volunteerId],
     enabled: !!volunteerId,
     queryFn: async () => {
-      // 1. Get Attendance Stats
-      const { data: attendance } = await api
-        .from("volunteer_attendance")
-        .select(
-          `
-          status, 
-          session_id, 
-          sessions (
-            session_date,
-            start_time,
-            end_time
-          )
-        `,
-        )
-        .eq("volunteer_id", volunteerId);
+      const [attendanceRecords, allSessions, volunteer] = await Promise.all([
+        attendanceApi.getVolunteerAttendance({ volunteer_id: volunteerId! }),
+        sessionsApi.getAll(),
+        volunteersApi.getById(volunteerId!),
+      ]);
 
-      const totalSessionsAttended =
-        attendance?.filter((a: { status: string }) => a.status === "present")
-          .length || 0;
-      const totalSessionsAssigned = attendance?.length || 0;
+      // Build session lookup map
+      const sessionMap = new Map(allSessions.map((s: Session) => [s.id, s]));
+
+      // Enrich attendance with session data
+      const attendance = attendanceRecords.map((a: any) => ({
+        ...a,
+        sessions: sessionMap.get(a.session_id) || null,
+      }));
+
+      const totalSessionsAttended = attendance.filter(
+        (a: any) => a.status === "present",
+      ).length;
+      const totalSessionsAssigned = attendance.length;
       const attendanceRate =
         totalSessionsAssigned > 0
           ? Math.round((totalSessionsAttended / totalSessionsAssigned) * 100)
           : 0;
-
-      // Estimate hours: 2 hours per session default, or calculate from start/end if available?
       const totalHours = totalSessionsAttended * 2;
 
-      // 2. Get Next Session
+      // Next upcoming session
       const today = new Date().toISOString().split("T")[0];
-      const { data: nextSessionData } = await api
-        .from("sessions")
-        .select("*, session_rsvps(status)")
-        .gte("session_date", today)
-        .order("session_date", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+      const nextSessionData =
+        allSessions
+          .filter((s: Session) => s.session_date >= today)
+          .sort((a: Session, b: Session) =>
+            a.session_date.localeCompare(b.session_date),
+          )[0] || null;
 
-      // Check current user's RSVP if session exists
-      let nextSession = null;
-      if (nextSessionData) {
-        const { data: userRsvpData } = await api
-          .from("session_rsvps")
-          .select("status")
-          .eq("session_id", nextSessionData.id)
-          .eq("volunteer_id", volunteerId)
-          .maybeSingle();
+      const nextSession = nextSessionData
+        ? { ...nextSessionData, userRsvp: null }
+        : null;
 
-        nextSession = {
-          ...nextSessionData,
-          userRsvp: userRsvpData?.status || null,
-        };
-      }
-
-      // 3. Get Recent Attendance History (last 6 months) for Chart
+      // Attendance chart (last 6 months)
       const sixMonthsAgo = subMonths(new Date(), 6);
-      const recentAttendance = attendance?.filter(
-        (a: { sessions: { session_date: string } }) => {
-          const sessionDate = new Date(a.sessions?.session_date);
-          return sessionDate >= sixMonthsAgo;
-        },
-      );
+      const recentAttendance = attendance.filter((a: any) => {
+        const sessionDate = a.sessions?.session_date
+          ? new Date(a.sessions.session_date)
+          : null;
+        return sessionDate && sessionDate >= sixMonthsAgo;
+      });
 
-      // Group by month
       const months = eachMonthOfInterval({
         start: subMonths(new Date(), 5),
         end: new Date(),
@@ -310,18 +284,17 @@ export function useVolunteerStats(volunteerId: string | null) {
         const monthStart = startOfMonth(date);
         const monthEnd = endOfMonth(date);
 
-        const sessionsInMonth = recentAttendance?.filter(
-          (a: { sessions: { session_date: string } }) => {
-            const d = new Date(a.sessions?.session_date);
-            return d >= monthStart && d <= monthEnd;
-          },
-        );
+        const sessionsInMonth = recentAttendance.filter((a: any) => {
+          const d = a.sessions?.session_date
+            ? new Date(a.sessions.session_date)
+            : null;
+          return d && d >= monthStart && d <= monthEnd;
+        });
 
-        const presentCount =
-          sessionsInMonth?.filter(
-            (a: { status: string }) => a.status === "present",
-          ).length || 0;
-        const totalCount = sessionsInMonth?.length || 0;
+        const presentCount = sessionsInMonth.filter(
+          (a: any) => a.status === "present",
+        ).length;
+        const totalCount = sessionsInMonth.length;
 
         return {
           name: monthStr,
@@ -332,15 +305,10 @@ export function useVolunteerStats(volunteerId: string | null) {
         };
       });
 
-      // Active Since (Days Active)
-      const { data: volunteer } = await api
-        .from("volunteers")
-        .select("created_at")
-        .eq("id", volunteerId)
-        .maybeSingle();
-      const activeDays = volunteer?.created_at
+      const activeDays = (volunteer as any)?.created_at
         ? Math.floor(
-            (new Date().getTime() - new Date(volunteer.created_at).getTime()) /
+            (new Date().getTime() -
+              new Date((volunteer as any).created_at).getTime()) /
               (1000 * 60 * 60 * 24),
           )
         : 0;
@@ -350,7 +318,7 @@ export function useVolunteerStats(volunteerId: string | null) {
         totalHours,
         attendanceRate,
         activeDays,
-        nextSession: nextSession as any, // casting to any to include userRsvp, temporary fix until types updated
+        nextSession: nextSession as any,
         attendanceChartData,
       };
     },
@@ -364,78 +332,65 @@ export function useNotifications(
   return useQuery({
     queryKey: ["notifications", limit, visibility],
     queryFn: async () => {
-      // 1. Get Recent Notices
-      let noticeQuery = api
-        .from("notices")
-        .select("id, title, description, published_date, visibility")
-        .order("published_date", { ascending: false })
-        .limit(limit);
+      const today = new Date().toISOString().split("T")[0];
+      const params = visibility ? { visibility } : undefined;
 
-      if (visibility) {
-        noticeQuery = noticeQuery.eq("visibility", visibility);
-      }
+      const [notices, sessions] = await Promise.all([
+        noticesApi.getAll(params),
+        sessionsApi.getAll(),
+      ]);
 
-      const { data: notices } = await noticeQuery;
+      const upcomingSessions = sessions
+        .filter((s: Session) => s.session_date >= today)
+        .sort((a: Session, b: Session) =>
+          a.session_date.localeCompare(b.session_date),
+        )
+        .slice(0, 5);
 
-      // 2. Get Upcoming Sessions (as notifications)
-      const today = new Date();
-      const { data: sessions } = await api
-        .from("sessions")
-        .select("id, location, session_date, start_time")
-        .gte("session_date", today.toISOString().split("T")[0])
-        .order("session_date", { ascending: true })
-        .limit(5);
+      const sortedNotices = notices
+        .sort((a: any, b: any) => {
+          const dateA = a.published_date
+            ? new Date(a.published_date).getTime()
+            : 0;
+          const dateB = b.published_date
+            ? new Date(b.published_date).getTime()
+            : 0;
+          return dateB - dateA;
+        })
+        .slice(0, limit);
 
-      // 3. Combine and Format
       const combined = [
-        ...(notices || []).map(
-          (n: Session & { description: string; published_date: string }) => ({
-            id: `notice-${n.id}`,
-            type: "notice",
-            title: n.title,
-            message: n.description,
-            date: new Date(n.published_date),
-            read: false,
-          }),
-        ),
-        ...(sessions || []).map((s: Session) => ({
+        ...sortedNotices.map((n: any) => ({
+          id: `notice-${n.id}`,
+          type: "notice",
+          title: n.title,
+          message: n.description,
+          date: n.published_date ? new Date(n.published_date) : new Date(),
+          read: false,
+        })),
+        ...upcomingSessions.map((s: Session) => ({
           id: `session-${s.id}`,
           type: "session",
           title: "Upcoming Session",
           message: `${s.location} on ${format(new Date(s.session_date), "MMM dd")} at ${s.start_time}`,
-          date: new Date(s.session_date), // This is in future, so it stays at top if sorting by "latest first"??
+          date: new Date(s.session_date),
           read: false,
         })),
       ];
 
-      // Sort by DATE DESCENDING (Newest/Future first)
       return combined.sort((a, b) => b.date.getTime() - a.date.getTime());
     },
   });
 }
-// ... existing code ...
+
 export function useSessionDetailedRSVPs(sessionId: string | null) {
   return useQuery({
     queryKey: ["session-rsvps-detail", sessionId],
     enabled: !!sessionId,
     queryFn: async () => {
-      const { data, error } = await api
-        .from("session_rsvps")
-        .select(
-          `
-          status,
-          volunteers (
-            id,
-            name,
-            email,
-            profile_picture,
-            volunteer_id
-          )
-        `,
-        )
-        .eq("session_id", sessionId);
-
-      if (error) throw error;
+      const { data } = await apiClient.get("/session_rsvps", {
+        params: { session_id: sessionId },
+      });
       return data || [];
     },
   });
