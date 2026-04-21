@@ -7,7 +7,9 @@ import { useTheme } from "next-themes";
 import { Button } from "../../components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { useAuth } from "../../contexts/AuthContext";
-import { api } from "../../lib/api";
+import { useDispatch } from "react-redux";
+import type { AppDispatch } from "../../store/store";
+import { updateUserThunk } from "../../store/slices/authSlice";
 import { useToast } from "../../hooks/use-toast";
 import { exportToExcel, exportToPDF } from "../../lib/exportUtils";
 
@@ -15,6 +17,7 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
   const { user } = useAuth();
+  const dispatch = useDispatch<AppDispatch>();
 
   const [startPage, setStartPage] = useState("dashboard");
   const [tableDensity, setTableDensity] = useState("comfortable");
@@ -22,8 +25,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (user?.preferences) {
-      setStartPage(user.preferences.startPage || "dashboard");
-      setTableDensity(user.preferences.tableDensity || "comfortable");
+      setStartPage((user.preferences.startPage as string) || "dashboard");
+      setTableDensity((user.preferences.tableDensity as string) || "comfortable");
     }
   }, [user]);
 
@@ -33,14 +36,9 @@ export default function SettingsPage() {
     if (key === 'tableDensity') setTableDensity(value);
 
     try {
-      await api.auth.updateUser({
-        data: {
-          preferences: {
-            ...user?.preferences,
-            [key]: value
-          }
-        }
-      });
+      await dispatch(updateUserThunk({
+        preferences: { ...user?.preferences, [key]: value },
+      }));
       toast({ title: "Preference saved", duration: 1500 });
     } catch (error) {
       console.error(error);

@@ -31,7 +31,7 @@ import {
     Users,
     ShieldAlert
 } from "lucide-react";
-import { storageService } from "../../lib/storageService";
+import { mediaApi } from "../../services/mediaApi";
 import { FeatureCardsEditor, ImpactCardsEditor } from "../../components/admin/CardEditor";
 import { TeamMembersEditor, ValuesEditor, VisionMissionEditor } from "../../components/admin/AboutEditor";
 
@@ -178,17 +178,9 @@ export default function SiteCustomizationPage() {
 
     const handleImageUpload = async (sectionId: string, key: string, file: File) => {
         try {
-            const fileName = `${sectionId}_${key}_${Date.now()}.${file.name.split('.').pop()}`;
-            const { data, error } = await storageService.from('site-images').upload(fileName, file);
-
-            if (error) {
-                throw new Error(error.message);
-            }
-
-            // Get the public URL (base64 data URL)
-            const { data: urlData } = storageService.from('site-images').getPublicUrl(data?.path || fileName);
-            handleChange(sectionId, key, urlData.publicUrl);
-
+            const caption = `${sectionId}_${key}_${Date.now()}.${file.name.split('.').pop()}`;
+            const uploaded = await mediaApi.upload(file, caption);
+            handleChange(sectionId, key, mediaApi.getPublicUrl(uploaded.url));
             toast({ title: "Image uploaded successfully" });
         } catch (err) {
             toast({

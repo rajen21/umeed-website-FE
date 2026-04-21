@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { noticesApi } from "../../services/noticesApi";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Textarea } from "../../components/ui/textarea";
@@ -43,14 +43,7 @@ export default function NoticesPage() {
 
   const { data: notices, isLoading } = useQuery({
     queryKey: ["notices"],
-    queryFn: async () => {
-      const { data, error } = await api
-        .from("notices")
-        .select("*")
-        .order("published_date", { ascending: false });
-      if (error) throw error;
-      return data as Notice[];
-    },
+    queryFn: () => noticesApi.getAll() as Promise<Notice[]>,
   });
 
   const saveMutation = useMutation({
@@ -71,17 +64,9 @@ export default function NoticesPage() {
         attachment_url: attachment,
       };
 
-      const { error } = await api
-        .from("notices")
-        .upsert(
-          payload.id
-            ? { ...noticeData, id: payload.id }
-            : noticeData
-        )
-        .select()
-        .single();
-
-      if (error) throw error;
+      await (payload.id
+        ? noticesApi.update(payload.id, noticeData)
+        : noticesApi.create(noticeData));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notices"] });
@@ -94,8 +79,7 @@ export default function NoticesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await api.from("notices").delete().eq("id", id);
-      if (error) throw error;
+      await noticesApi.remove(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notices"] });
