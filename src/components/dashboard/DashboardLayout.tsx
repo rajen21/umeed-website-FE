@@ -6,7 +6,7 @@ import { Bell, LogOut, Settings, User } from "lucide-react";
 import { ModeToggle } from "../../components/ModeToggle";
 import { Button } from "../../components/ui/button";
 import { useAuth } from "../../contexts/AuthContext";
-import { api } from "../../lib/api";
+import { volunteersApi } from "../../services/volunteersApi";
 import { useToast } from "../../hooks/use-toast";
 import {
   DropdownMenu,
@@ -49,26 +49,19 @@ function DashboardLayoutContent() {
     const linkVolunteerProfile = async () => {
       if (!user?.email || !user.id || role !== "volunteer") return;
 
-      const { data: existingVolunteer } = await api
-        .from("volunteers")
-        .select("id, user_id")
-        .eq("email", user.email)
-        .filter("user_id", "is", null)
-        .single();
-
-      if (existingVolunteer) {
-        const { error } = await api
-          .from("volunteers")
-          .update({ user_id: user.id })
-          .eq("id", existingVolunteer.id);
-
-        if (!error) {
+      try {
+        const vols = await volunteersApi.getAll({ email: user.email });
+        const unlinked = vols.find((v: any) => !v.user_id);
+        if (unlinked) {
+          await volunteersApi.update(unlinked.id, { user_id: user.id } as any);
           toast({
             title: "Profile Linked",
             description: "Your volunteer profile has been connected to your account.",
             className: "bg-green-50 border-green-200",
           });
         }
+      } catch {
+        // ignore link errors silently
       }
     };
 
@@ -80,15 +73,15 @@ function DashboardLayoutContent() {
     const fetchVolunteerData = async () => {
       if (!user?.email) return;
 
-      const { data } = await api
-        .from("volunteers")
-        .select("name, profile_picture")
-        .eq("email", user.email)
-        .maybeSingle();
-
-      if (data) {
-        if (data.name) setVolunteerName(data.name);
-        if (data.profile_picture) setVolunteerAvatar(data.profile_picture);
+      try {
+        const vols = await volunteersApi.getAll({ email: user.email });
+        const vol = vols[0];
+        if (vol) {
+          if (vol.name) setVolunteerName(vol.name);
+          if ((vol as any).profile_picture) setVolunteerAvatar((vol as any).profile_picture);
+        }
+      } catch {
+        // ignore fetch errors silently
       }
     };
 
@@ -132,7 +125,7 @@ function DashboardLayoutContent() {
               <SidebarTrigger className="-ml-1 shrink-0" />
               <div className="min-w-0 hidden md:block">
                 <h1 className="text-base md:text-lg font-semibold text-foreground truncate">
-                  Welcome, {volunteerName?.split(' ')[0] || user?.user_metadata?.full_name?.split(' ')[0] || user?.user_metadata?.name?.split(' ')[0] || user?.email?.split("@")[0] || "User"}
+                  Welcome, {volunteerName?.split(' ')[0] || user?.fullName?.split(' ')[0] || user?.email?.split("@")[0] || "User"}
                 </h1>
 
               </div>
@@ -197,7 +190,7 @@ function DashboardLayoutContent() {
                   <Button variant="ghost" className="relative h-9 w-9 rounded-full">
                     <Avatar className="h-9 w-9 border border-border">
                       <AvatarImage
-                        src={volunteerAvatar || user?.user_metadata?.avatar_url || "/placeholder-avatar.jpg"}
+                        src={volunteerAvatar || user?.avatarUrl || "/placeholder-avatar.jpg"}
                         alt={user?.email || "User"}
                         className="object-cover"
                       />
