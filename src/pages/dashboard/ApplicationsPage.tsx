@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { api, authService } from "../../lib/api";
+import { authService } from "../../lib/api";
+import { applicationsApi } from "../../services/applicationsApi";
+import { volunteersApi } from "../../services/volunteersApi";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { Badge } from "../../components/ui/badge";
@@ -43,68 +45,45 @@ export default function ApplicationsPage() {
 
   const { data: applications, isLoading } = useQuery({
     queryKey: ["applications"],
-    queryFn: async () => {
-      const { data, error } = await api.from("volunteer_applications").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as Application[];
-    },
+    queryFn: () => applicationsApi.getAll() as Promise<Application[]>,
   });
 
   const updateMutation = useMutation({
     mutationFn: async (payload: { app: Application; status: Application["status"] }) => {
       // 1. Update Application Status
-      const { error: updateError } = await api
-        .from("volunteer_applications")
-        .update({ status: payload.status })
-        .eq("id", payload.app.id);
+      await applicationsApi.update(payload.app.id, { status: payload.status });
 
-      if (updateError) throw updateError;
-
-      // 2. If Approved, Create Volunteer Record with local auth
+      // 2. If Approved, create volunteer profile + auth account
       if (payload.status === "approved") {
-        // Create local auth user
-        const { data: authData, error: authError } = await authService.signUp({
-          email: payload.app.email,
-          password: "umeed@123",
-          options: {
-            data: { full_name: payload.app.full_name }
-          }
-        });
+        const { data: authData, error: authError } = await authService.register(
+          payload.app.email,
+          "umeed@123",
+          payload.app.full_name,
+        ).then((d) => ({ data: d, error: null })).catch((e) => ({ data: null, error: e }));
 
         if (authError) {
           console.warn("User creation warning (may already exist):", authError.message);
         }
 
-        // Check if volunteer profile already exists (by email)
-        const { data: existing } = await api
-          .from("volunteers")
-          .select("id")
-          .eq("email", payload.app.email)
-          .single();
-
-        if (!existing) {
-          const { error: createError } = await api.from("volunteers").insert({
+        const existing = await volunteersApi.getAll({ email: payload.app.email });
+        if (!existing.length) {
+          await volunteersApi.create({
             name: payload.app.full_name,
             email: payload.app.email,
-            phone: payload.app.phone,
-            age: payload.app.age,
-            gender: payload.app.gender,
-            address: payload.app.address,
-            occupation: payload.app.occupation,
-            availability: payload.app.availability,
-            skills: payload.app.skills_subjects,
-            preferred_languages: payload.app.preferred_languages,
+            phone: payload.app.phone ?? undefined,
+            age: payload.app.age ?? undefined,
+            gender: payload.app.gender ?? undefined,
+            address: payload.app.address ?? undefined,
+            occupation: payload.app.occupation ?? undefined,
+            availability: payload.app.availability ?? undefined,
+            skills: payload.app.skills_subjects as any,
+            preferred_languages: payload.app.preferred_languages as any,
             status: "pending",
             joined_at: new Date().toISOString(),
-            user_id: authData?.user?.id
+            user_id: authData?.user?.id,
           } as any);
-
-          if (createError) throw createError;
-        } else {
-          // If profile exists but user_id is null, update it
-          if (authData?.user?.id) {
-            await api.from("volunteers").update({ user_id: authData.user.id } as any).eq("email", payload.app.email);
-          }
+        } else if (authData?.user?.id) {
+          await volunteersApi.update(existing[0].id, { user_id: authData.user.id } as any);
         }
       }
     },

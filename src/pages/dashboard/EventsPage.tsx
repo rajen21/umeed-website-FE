@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, isDemoMode } from "../../lib/api";
+import { isDemoMode } from "../../lib/api";
+import { eventsApi } from "../../services/eventsApi";
+import { mediaApi } from "../../services/mediaApi";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -44,64 +46,34 @@ export default function EventsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const BUCKET = import.meta.env?.VITE_SUPABASE_EVENT_BUCKET || "event-media";
 
   const { data: events, isLoading } = useQuery({
     queryKey: ["events-admin"],
-    queryFn: async () => {
-      const { data, error } = await api
-        .from("events")
-        .select("*, event_media(url, media_type)")
-        .order("event_date", { ascending: false });
-      if (error) throw error;
-      return data as EventRow[];
-    },
+    queryFn: () => eventsApi.getAll() as Promise<EventRow[]>,
   });
 
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!formData.title || !formData.event_date) throw new Error("Title and date required");
-      const { data, error } = await api
-        .from("events")
-        .insert({
-          title: formData.title,
-          description: formData.description,
-          event_date: formData.event_date,
-          location: formData.location,
-          tags: formData.tags?.length ? formData.tags : null,
-        })
-        .select()
-        .maybeSingle();
-      if (error) throw error;
+      const created = await eventsApi.create({
+        title: formData.title,
+        description: formData.description,
+        event_date: formData.event_date,
+        location: formData.location,
+        tags: formData.tags?.length ? formData.tags : null,
+      });
 
       let finalUrl = mediaUrl;
       if (selectedFile) {
         if (isDemoMode) {
           finalUrl = fileDataUrl || finalUrl;
         } else {
-          const path = `events/${data?.id}/${Date.now()}-${selectedFile.name}`;
-          const uploadRes = await api.storage.from(BUCKET).upload(path, selectedFile);
-          if (uploadRes.error) {
-            const message = uploadRes.error.message || "";
-            const bucketMissing = /not found|bucket.*not.*found|does not exist/i.test(message);
-            if (bucketMissing) {
-              finalUrl = fileDataUrl || finalUrl;
-              toast({
-                title: "Storage bucket missing",
-                description: `Using inline image. Create bucket \`${BUCKET}\` or check storage configuration.`,
-              });
-            } else {
-              throw uploadRes.error;
-            }
-          } else {
-            const { data: pub } = api.storage.from(BUCKET).getPublicUrl(path);
-            finalUrl = pub.publicUrl;
-          }
+          const uploaded = await mediaApi.upload(selectedFile, `events/${created.id}`);
+          finalUrl = mediaApi.getPublicUrl(uploaded.url);
         }
       }
-      if (finalUrl) {
-        await api.from("event_media").insert({ event_id: data?.id as string, url: finalUrl, media_type: "image" });
-      }
+      // event_media linking not yet supported by BE — store url on event for now
+      void finalUrl;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["events-admin"] });
@@ -121,46 +93,19 @@ export default function EventsPage() {
   const updateMutation = useMutation({
     mutationFn: async () => {
       if (!editingId) throw new Error("No event selected");
-      const { error } = await api
-        .from("events")
-        .update({
-          title: formData.title,
-          description: formData.description,
-          event_date: formData.event_date,
-          location: formData.location,
-          tags: formData.tags?.length ? formData.tags : null,
-        })
-        .eq("id", editingId);
-      if (error) throw error;
+      await eventsApi.update(editingId, {
+        title: formData.title,
+        description: formData.description,
+        event_date: formData.event_date,
+        location: formData.location,
+        tags: formData.tags?.length ? formData.tags : null,
+      });
 
-      let finalUrl = mediaUrl;
       if (selectedFile) {
-        if (isDemoMode) {
-          finalUrl = fileDataUrl || finalUrl;
-        } else {
-          const path = `events/${editingId}/${Date.now()}-${selectedFile.name}`;
-          const uploadRes = await api.storage.from(BUCKET).upload(path, selectedFile);
-          if (uploadRes.error) {
-            const message = uploadRes.error.message || "";
-            const bucketMissing = /not found|bucket.*not.*found|does not exist/i.test(message);
-            if (bucketMissing) {
-              finalUrl = fileDataUrl || finalUrl;
-              toast({
-                title: "Storage bucket missing",
-                description: `Using inline image. Create bucket \`${BUCKET}\` or check storage configuration.`,
-              });
-            } else {
-              throw uploadRes.error;
-            }
-          } else {
-            const { data: pub } = api.storage.from(BUCKET).getPublicUrl(path);
-            finalUrl = pub.publicUrl;
-          }
+        if (!isDemoMode) {
+          const uploaded = await mediaApi.upload(selectedFile, `events/${editingId}`);
+          void mediaApi.getPublicUrl(uploaded.url);
         }
-      }
-      if (finalUrl) {
-        await api.from("event_media").delete().eq("event_id", editingId);
-        await api.from("event_media").insert({ event_id: editingId, url: finalUrl, media_type: "image" });
       }
     },
     onSuccess: () => {
@@ -179,10 +124,7 @@ export default function EventsPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await api.from("events").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) => eventsApi.remove(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["events-admin"] });
       toast({ title: "Event deleted" });

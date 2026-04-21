@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { api } from "../../lib/api";
+import { sessionsApi } from "../../services/sessionsApi";
+import { attendanceApi } from "../../services/attendanceApi";
 import { useAuth } from "../../contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
@@ -29,12 +30,10 @@ export default function MySessionsPage() {
   const { data: sessions, isLoading: sessionsLoading } = useQuery({
     queryKey: ["all-sessions"],
     queryFn: async () => {
-      const { data, error } = await api
-        .from("sessions")
-        .select("id, session_date, location, notes")
-        .order("session_date", { ascending: false });
-      if (error) throw error;
-      return data as Session[];
+      const data = await sessionsApi.getAll();
+      return (data as Session[]).sort((a, b) =>
+        new Date(b.session_date).getTime() - new Date(a.session_date).getTime()
+      );
     },
   });
 
@@ -43,11 +42,7 @@ export default function MySessionsPage() {
     queryKey: ["my-volunteer-attendance", volunteerId],
     enabled: !!volunteerId,
     queryFn: async () => {
-      const { data, error } = await api
-        .from("volunteer_attendance")
-        .select("session_id, status")
-        .eq("volunteer_id", volunteerId);
-      if (error) throw error;
+      const data = await attendanceApi.getVolunteerAttendance({ volunteer_id: volunteerId! });
       return data as AttendanceRecord[];
     },
   });

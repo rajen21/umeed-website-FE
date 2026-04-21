@@ -18,7 +18,7 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
-import { api } from "../../lib/api";
+import apiClient from "../../lib/apiClient";
 import { useToast } from "../../hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -31,22 +31,17 @@ export function VolunteerDashboard() {
         if (!volunteerId) return;
 
         try {
-            const { error } = await api
-                .from('session_rsvps')
-                .upsert({
-                    session_id: sessionId,
-                    volunteer_id: volunteerId,
-                    status: status
-                });
-
-            if (error) throw error;
+            await apiClient.post('/session_rsvps', {
+                session_id: sessionId,
+                volunteer_id: volunteerId,
+                status,
+            });
 
             toast({
                 title: "RSVP Updated",
                 description: `You marked yourself as "${status}" for this session.`,
             });
 
-            // Invalidate to refresh stats and UI
             queryClient.invalidateQueries({ queryKey: ["volunteer-dashboard-stats"] });
         } catch (error) {
             console.error("Error updating RSVP:", error);
@@ -100,7 +95,7 @@ export function VolunteerDashboard() {
                                 </p>
                             </div>
 
-                            <div className="flex flex-col gap-3 w-full md:w-auto min-w-[300px]">
+                            <div className="flex flex-col gap-3 w-full md:w-auto md:min-w-[300px]">
                                 {stats.nextSession.rsvp_enabled && (
                                     <div className="bg-background/50 p-3 rounded-lg border border-border/50">
                                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 text-center">Are you attending?</p>
@@ -242,7 +237,7 @@ export function VolunteerDashboard() {
             </div>
 
             {/* Charts & Lists Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {/* Attendance Chart - Spans 2 columns */}
                 <motion.div
                     className="lg:col-span-2"
@@ -324,12 +319,12 @@ export function VolunteerDashboard() {
                             <CardContent className="p-0">
                                 <div className="divide-y">
                                     {notices?.length ? (
-                                        notices.map((notice: {title: string, id: string, published_date: string, description: string}) => (
+                                        notices.map((notice: any) => (
                                             <div key={notice.id} className="p-4 hover:bg-muted/30 transition-colors">
                                                 <div className="flex items-start justify-between gap-2">
                                                     <h4 className="font-medium text-sm line-clamp-1">{notice.title}</h4>
                                                     <span className="text-[10px] text-muted-foreground whitespace-nowrap bg-muted px-1.5 py-0.5 rounded">
-                                                        {format(new Date(notice.published_date), "MMM dd")}
+                                                        {notice.published_date ? format(new Date(notice.published_date), "MMM dd") : ""}
                                                     </span>
                                                 </div>
                                                 <p className="text-xs text-muted-foreground mt-1 line-clamp-2">

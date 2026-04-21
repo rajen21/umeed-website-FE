@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { studentsApi } from "../../services/studentsApi";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { Button } from "../../components/ui/button";
@@ -43,14 +43,7 @@ export default function StudentsPage() {
 
   const { data: students, isLoading } = useQuery({
     queryKey: ["students"],
-    queryFn: async () => {
-      const { data, error } = await api
-        .from("students")
-        .select("*")
-        .order("full_name");
-      if (error) throw error;
-      return data as unknown as StudentExtended[];
-    },
+    queryFn: () => studentsApi.getAll() as Promise<StudentExtended[]>,
   });
 
   const createMutation = useMutation({
@@ -97,8 +90,7 @@ export default function StudentsPage() {
         insertData.image_url = student.image_url;
       }
 
-      const { error } = await api.from("students").insert([insertData]);
-      if (error) throw error;
+      await studentsApi.create(insertData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["students"] });
@@ -146,11 +138,7 @@ export default function StudentsPage() {
         updateData.image_url = student.image_url;
       }
 
-      const { error } = await api
-        .from("students")
-        .update(updateData)
-        .eq("id", selectedStudent.id);
-      if (error) throw error;
+      await studentsApi.update(selectedStudent.id, updateData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["students"] });
@@ -328,7 +316,7 @@ export default function StudentsPage() {
           isLoading={isLoading}
           isAdmin={isAdmin}
           onView={handleView}
-          density={user?.preferences?.tableDensity}
+          density={user?.preferences?.tableDensity as "compact" | "comfortable" | undefined}
         />
       </motion.div>
 

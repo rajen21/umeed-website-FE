@@ -3,7 +3,7 @@ import { Calendar, MapPin, Image as ImageIcon } from "lucide-react";
 import { Section, SectionHeader } from "../components/ui/section";
 import { Badge } from "../components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { eventsApi } from "../services/eventsApi";
 import { format } from "date-fns";
 
 type PublicEvent = {
@@ -21,12 +21,10 @@ const Events = () => {
   const { data, isLoading } = useQuery({
     queryKey: ["events-public"],
     queryFn: async () => {
-      const { data, error } = await api
-        .from("events")
-        .select("*, event_media(url, media_type)")
-        .order("event_date", { ascending: false });
-      if (error) throw error;
-      return data as PublicEvent[];
+      const data = await eventsApi.getAll();
+      return (data as PublicEvent[]).sort((a, b) =>
+        new Date(b.event_date ?? b.date ?? 0).getTime() - new Date(a.event_date ?? a.date ?? 0).getTime()
+      );
     },
   });
   const events = data || [];

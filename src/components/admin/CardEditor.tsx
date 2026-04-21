@@ -21,7 +21,7 @@ import { Plus, Trash2, Save, GripVertical, Upload } from "lucide-react";
 import { useToast } from "../../hooks/use-toast";
 import { useSiteContent } from "../../contexts/SiteContentContext";
 import type { FeatureCard, ImpactCard } from "../../lib/contentService";
-import { storageService } from "../../lib/storageService";
+import { mediaApi } from "../../services/mediaApi";
 
 // Available icons for feature cards
 const availableIcons = [
@@ -249,14 +249,9 @@ export function ImpactCardsEditor() {
 
     const handleImageUpload = async (index: number, file: File) => {
         try {
-            const fileName = `impact_${Date.now()}.${file.name.split('.').pop()}`;
-            const { data, error } = await storageService.from('site-images').upload(fileName, file);
-
-            if (error) throw new Error(error.message);
-
-            const { data: urlData } = storageService.from('site-images').getPublicUrl(data?.path || fileName);
-            updateCard(index, 'image', urlData.publicUrl);
-
+            const caption = `impact_${Date.now()}.${file.name.split('.').pop()}`;
+            const uploaded = await mediaApi.upload(file, caption);
+            updateCard(index, 'image', mediaApi.getPublicUrl(uploaded.url));
             toast({ title: "Image uploaded successfully" });
         } catch (err) {
             toast({

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Progress } from "../../components/ui/progress";
 import { Badge } from "../../components/ui/badge";
-import { api } from "../../lib/api";
+import { attendanceApi } from "../../services/attendanceApi";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { useAuth } from "../../contexts/AuthContext";
@@ -40,18 +40,13 @@ export default function DashboardHome() {
 
         if (volunteerId) {
           // 2. Get Attendance Count
-          const { data, error: countError } = await api
-            .from("volunteer_attendance")
-            .select("*", { count: "exact", head: true })
-            .eq("volunteer_id", volunteerId)
-            .eq("status", "present");
-            const count = data?.length
-
-          if (countError) {
-            console.warn("Could not fetch attendance count (table might be missing), defaulting to 0:", countError);
+          try {
+            const attendance = await attendanceApi.getVolunteerAttendance({ volunteer_id: volunteerId });
+            const count = attendance.filter((a: any) => a.status === "present").length;
+            setProbationStats({ count, isPending: true });
+          } catch (countError) {
+            console.warn("Could not fetch attendance count, defaulting to 0:", countError);
             setProbationStats({ count: 0, isPending: true });
-          } else {
-            setProbationStats({ count: count || 0, isPending: true });
           }
         } else {
           // Status pending but no ID yet? Just show 0 progress

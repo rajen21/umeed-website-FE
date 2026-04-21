@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { sessionsApi } from "../../services/sessionsApi";
+import { studentsApi } from "../../services/studentsApi";
+import { volunteersApi } from "../../services/volunteersApi";
+import { attendanceApi } from "../../services/attendanceApi";
 import { Button } from "../../components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
@@ -12,7 +15,6 @@ import { cn } from "../../lib/utils";
 import { Input } from "../../components/ui/input";
 import { useAuth } from "../../contexts/AuthContext";
 import { Alert, AlertDescription } from "../../components/ui/alert";
-import type { CustomError } from "../../types/common";
 import type { Session } from "../../types/session";
 
 type AttendanceStatus = "present" | "absent" | "late" | "excused";
@@ -35,14 +37,7 @@ export function AttendanceMarking() {
     // Fetch Sessions
     const { data: sessions } = useQuery({
         queryKey: ["sessions-list"],
-        queryFn: async () => {
-            const { data } = await api
-                .from("sessions")
-                .select("id, session_date, location")
-                .order("session_date", { ascending: false })
-                .limit(20);
-            return data || [];
-        },
+        queryFn: () => sessionsApi.getAll(),
     });
 
     // Auto-select most recent session
@@ -57,17 +52,8 @@ export function AttendanceMarking() {
         queryKey: ["attendance-update-count", selectedSessionId, user?.id],
         enabled: !!selectedSessionId && !!user?.id && isVolunteer,
         queryFn: async () => {
-            const { data, error } = await api
-                .from("attendance_update_log")
-                .select("update_count")
-                .eq("session_id", selectedSessionId)
-                .eq("user_id", user?.id)
-                .maybeSingle();
-                const err = error as CustomError;
-            if (err && err.code !== "PGRST116") {
-                console.warn("Could not fetch update count:", error);
-            }
-            return data?.update_count || 0;
+            // attendance_update_log endpoint not yet in BE, default to 0
+            return 0;
         },
     });
 
@@ -79,17 +65,11 @@ export function AttendanceMarking() {
         queryKey: ["attendance-people", activeTab],
         queryFn: async () => {
             if (activeTab === "students") {
-                const { data } = await api
-                    .from("students")
-                    .select("id, full_name, status, enrollment_date")
-                    .order("full_name");
-                return (data as any[])?.map(d => ({ id: d.id, name: d.full_name, type: "student", avatar: null })) || [];
+                const data = await studentsApi.getAll();
+                return data.map((d: any) => ({ id: d.id, name: d.full_name, type: "student", avatar: null }));
             } else {
-                const { data } = await api
-                    .from("volunteers")
-                    .select("id, name, status, profile_picture")
-                    .order("name");
-                return (data as any[])?.map(d => ({ id: d.id, name: d.name, type: "volunteer", avatar: d.profile_picture })) || [];
+                const data = await volunteersApi.getAll();
+                return data.map((d: any) => ({ id: d.id, name: d.name, type: "volunteer", avatar: d.profile_picture }));
             }
         },
     });
@@ -99,18 +79,12 @@ export function AttendanceMarking() {
         queryKey: ["existing-attendance", selectedSessionId, activeTab],
         enabled: !!selectedSessionId,
         queryFn: async () => {
-            const table = activeTab === "students" ? "student_attendance" : "volunteer_attendance";
             const userCol = activeTab === "students" ? "student_id" : "volunteer_id";
-
-            const { data } = await api
-                .from(table as any)
-                .select(`id, status, ${userCol}`)
-                .eq("session_id", selectedSessionId);
-
+            const data = activeTab === "students"
+                ? await attendanceApi.getStudentAttendance({ session_id: selectedSessionId })
+                : await attendanceApi.getVolunteerAttendance({ session_id: selectedSessionId });
             const map: Record<string, AttendanceStatus> = {};
-            data?.forEach((d: any) => {
-                map[d[userCol]] = d.status;
-            });
+            data.forEach((d: any) => { map[d[userCol]] = d.status; });
             return map;
         },
     });
@@ -173,31 +147,14 @@ export function AttendanceMarking() {
                 throw new Error("Sorry, you cannot make any more updates. Please contact your admin for changes.");
             }
 
-            const table = activeTab === "students" ? "student_attendance" : "volunteer_attendance";
-            const userKey = activeTab === "students" ? "student_id" : "volunteer_id";
-
-            const upsertData = Object.entries(attendance).map(([userId, status]) => ({
-                session_id: selectedSessionId,
-                [userKey]: userId,
-                status,
-                marked_at: new Date().toISOString(),
-            }));
-
-            const { error } = await api.from(table as any).upsert(upsertData);
-
-            if (error) throw error;
-
-            // If volunteer, increment update count
-            if (isVolunteer && user?.id) {
-                await api
-                    .from("attendance_update_log")
-                    .upsert({
-                        session_id: selectedSessionId,
-                        user_id: user.id,
-                        update_count: updateCount + 1,
-                        last_updated: new Date().toISOString(),
-                    });
-            }
+            const entries = Object.entries(attendance);
+            await Promise.all(
+                entries.map(([userId, status]) =>
+                    activeTab === "students"
+                        ? attendanceApi.markStudentAttendance({ student_id: userId, session_id: selectedSessionId, status })
+                        : attendanceApi.markVolunteerAttendance({ volunteer_id: userId, session_id: selectedSessionId, status }),
+                ),
+            );
         },
         onSuccess: () => {
             const updatesLeft = isVolunteer ? remainingUpdates - 1 : null;

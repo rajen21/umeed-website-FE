@@ -1,7 +1,9 @@
 import { sendApprovalEmail } from "../../services/emailService";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, authService } from "../../lib/api";
+import { authService } from "../../lib/api";
+import { volunteersApi } from "../../services/volunteersApi";
+import { attendanceApi } from "../../services/attendanceApi";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
@@ -52,29 +54,17 @@ export default function VolunteersPage() {
     queryKey: ["volunteers"],
     queryFn: async () => {
       // 1. Fetch Volunteers
-      const { data: volunteersData, error: volunteersError } = await api
-        .from("volunteers")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (volunteersError) {
-        console.error("DEBUG: Error fetching volunteers:", volunteersError);
-        throw volunteersError;
-      }
+      const volunteersData = await volunteersApi.getAll();
 
       // 2. Fetch Attendance
-      const { data: attendanceData, error: attendanceError } = await api
-        .from("volunteer_attendance")
-        .select("volunteer_id")
-        .eq("status", "present");
-
-      if (attendanceError) {
-        console.error("DEBUG: Error fetching attendance:", attendanceError);
-        // Continue without counts
+      let attendanceData: { volunteer_id: string }[] = [];
+      try {
+        attendanceData = await attendanceApi.getVolunteerAttendance({ status: "present" }) as any;
+      } catch {
         return volunteersData.map((v: Volunteer) => ({
           ...v,
           name: v.name || v.full_name || "Unknown Volunteer",
-          attendance_count: 0
+          attendance_count: 0,
         })) as Volunteer[];
       }
 
@@ -98,14 +88,13 @@ export default function VolunteersPage() {
   const createMutation = useMutation({
     mutationFn: async (volunteer: Partial<Volunteer>) => {
       if (!volunteer.name || !volunteer.email) throw new Error("Name and email are required");
-      const { error } = await api.from("volunteers").insert([{
+      await volunteersApi.create({
         ...volunteer,
         name: volunteer.name,
         email: volunteer.email,
-        status: volunteer.status || 'pending',
-        joining_date: new Date().toISOString()
-      }]);
-      if (error) throw error;
+        status: volunteer.status || "pending",
+        joined_at: new Date().toISOString(),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["volunteers"] });
@@ -118,8 +107,7 @@ export default function VolunteersPage() {
   const updateMutation = useMutation({
     mutationFn: async (volunteer: Partial<Volunteer> & { id: string }) => {
       const { id, ...data } = volunteer;
-      const { error } = await api.from("volunteers").update(data).eq("id", id);
-      if (error) throw error;
+      await volunteersApi.update(id, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["volunteers"] });
@@ -183,18 +171,7 @@ export default function VolunteersPage() {
       // 1. Create local auth user
       let createdUserId = null;
       try {
-        const { data: authData, error: authError } = await authService.signUp({
-          email: payload.email,
-          password: "umeed@123",
-          options: {
-            data: { full_name: payload.name },
-            autoLogin: false
-          }
-        });
-
-        if (authError) {
-          throw authError;
-        }
+        const authData = await authService.register(payload.email, "umeed@123", payload.name);
 
         console.log("Auth User Created Successfully:", authData?.user?.id);
         createdUserId = authData?.user?.id;
@@ -215,8 +192,10 @@ export default function VolunteersPage() {
       let maxSeq = 0;
       if (volunteers) {
         volunteers.forEach((v: Volunteer) => {
-          const seq = getVolunteerSequentialNumber(v.volunteer_id);
-          if (seq > maxSeq) maxSeq = seq;
+          if (v.volunteer_id) {
+            const seq = getVolunteerSequentialNumber(v.volunteer_id);
+            if (seq > maxSeq) maxSeq = seq;
+          }
         });
       }
       const newVolunteerId = generateVolunteerId(maxSeq);

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { attendanceApi } from "../../services/attendanceApi";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { Card, CardContent} from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
@@ -37,29 +37,29 @@ export function AttendanceHistory() {
     const { data: records, isLoading } = useQuery({
         queryKey: ["attendance-history-all"],
         queryFn: async () => {
-            const [studentsRes, volunteersRes] = await Promise.all([
-                api.from("student_attendance").select("id, status, marked_at, student_id, students(full_name), sessions(session_date)").limit(500),
-                api.from("volunteer_attendance").select("id, status, marked_at, volunteer_id, volunteers(name), sessions(session_date)").limit(500),
-            ]) as [any, any];
+            const [studentsData, volunteersData] = await Promise.all([
+                attendanceApi.getStudentAttendance(),
+                attendanceApi.getVolunteerAttendance(),
+            ]);
 
-            const studentRecords: AttendanceRecord[] = (studentsRes.data || []).map((r: any) => ({
+            const studentRecords: AttendanceRecord[] = (studentsData as any[]).map((r: any) => ({
                 id: r.id,
                 person_id: r.student_id,
                 name: r.students?.full_name || "Unknown",
                 type: "student",
-                date: r.sessions?.session_date,
+                date: r.sessions?.session_date ?? r.session_id,
                 status: r.status,
-                marked_at: r.marked_at
+                marked_at: r.marked_at,
             }));
 
-            const volunteerRecords: AttendanceRecord[] = (volunteersRes.data || []).map((r: any) => ({
+            const volunteerRecords: AttendanceRecord[] = (volunteersData as any[]).map((r: any) => ({
                 id: r.id,
                 person_id: r.volunteer_id,
                 name: r.volunteers?.name || "Unknown",
                 type: "volunteer",
-                date: r.sessions?.session_date,
+                date: r.sessions?.session_date ?? r.session_id,
                 status: r.status,
-                marked_at: r.marked_at
+                marked_at: r.marked_at,
             }));
 
             return [...studentRecords, ...volunteerRecords].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -147,7 +147,7 @@ export function AttendanceHistory() {
                     )}
 
                     <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as any)}>
-                        <SelectTrigger className="w-[150px]">
+                        <SelectTrigger className="w-full md:w-[150px]">
                             <div className="flex items-center gap-2">
                                 <Users className="w-4 h-4 text-muted-foreground" />
                                 <SelectValue placeholder="All Types" />
@@ -160,7 +160,7 @@ export function AttendanceHistory() {
                         </SelectContent>
                     </Select>
                     <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-                        <SelectTrigger className="w-[150px]">
+                        <SelectTrigger className="w-full md:w-[150px]">
                             <div className="flex items-center gap-2">
                                 <Filter className="w-4 h-4 text-muted-foreground" />
                                 <SelectValue placeholder="All Status" />

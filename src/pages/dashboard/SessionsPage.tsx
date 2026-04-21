@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, isDemoMode } from "../../lib/api";
+import { isDemoMode } from "../../lib/api";
+import { sessionsApi } from "../../services/sessionsApi";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Textarea } from "../../components/ui/textarea";
@@ -34,47 +35,22 @@ export default function SessionsPage() {
 
   const { data: sessions, isLoading } = useQuery({
     queryKey: ["sessions"],
-    queryFn: async () => {
-      const { data, error } = await api
-        .from("sessions")
-        .select("*, session_rsvps(count)") // Optimistically trying to fetch count if relation exists via foreign key
-        .order("session_date", { ascending: true });
-
-      // If the relation query fails (because I didn't set up the FK name explicitly effectively for Postgrest logic sometimes), 
-      // we might fallback or just standard select. 
-      // Given the SQL I wrote: "volunteer_id REFERENCES volunteers(id)" and "session_id REFERENCES sessions(id)" matches standard conventions.
-      // Postgrest should pick up `session_rsvps`.
-
-      if (error) throw error;
-      return data as Session[]; // leveraging any to handle the extra 'session_rsvps' count array/obj
-    },
+    queryFn: () => sessionsApi.getAll(),
   });
 
   const saveMutation = useMutation({
     mutationFn: async (payload: Partial<Session>) => {
       if (!payload.session_date) throw new Error("Date is required");
-
       const sessionData = {
         title: payload.title || "Untitled Session",
         session_date: payload.session_date,
-        start_time: payload.start_time || null,
-        end_time: payload.end_time || null,
-        location: payload.location || null,
-        notes: payload.notes || null,
+        start_time: payload.start_time || undefined,
+        end_time: payload.end_time || undefined,
+        location: payload.location || undefined,
+        notes: payload.notes || undefined,
         rsvp_enabled: payload.rsvp_enabled || false,
       };
-
-      const { error } = await api
-        .from("sessions")
-        .upsert(
-          payload.id
-            ? { ...sessionData, id: payload.id }
-            : sessionData
-        )
-        .select()
-        .single();
-
-      if (error) throw error;
+      await sessionsApi.save(payload.id ? { ...sessionData, id: payload.id } : sessionData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
@@ -86,10 +62,7 @@ export default function SessionsPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await api.from("sessions").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) => sessionsApi.remove(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
       toast({ title: "Session deleted" });

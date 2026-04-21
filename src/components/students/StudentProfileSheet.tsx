@@ -10,7 +10,10 @@ import { format } from "date-fns";
 import { User, MapPin, Phone, School, FileText, Calendar, UserCheck, BookOpen, Users, Activity, Pencil, Trash2 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { studentsApi } from "../../services/studentsApi";
+import { attendanceApi } from "../../services/attendanceApi";
+import { volunteersApi } from "../../services/volunteersApi";
+import apiClient from "../../lib/apiClient";
 import { toast } from "sonner";
 import {
     AlertDialog,
@@ -22,7 +25,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "../../components/ui/alert-dialog";
-import type { Student, StudentAttendenceHistory } from "../../types/student";
+import type { Student } from "../../types/student";
 
 interface StudentProfileSheetProps {
     student: StudentExtended | null;
@@ -41,8 +44,7 @@ export function StudentProfileSheet({ student, isOpen, onClose, onEdit }: Studen
 
     const handleDelete = async (s: StudentExtended) => {
         try {
-            const { error } = await api.from('students').delete().eq('id', s.id);
-            if (error) throw error;
+            await studentsApi.remove(s.id);
             await queryClient.invalidateQueries({ queryKey: ["students"] });
             toast.success("Student deleted successfully");
             onClose();
@@ -188,7 +190,7 @@ function StatsSummary({ studentId }: { studentId: string }) {
     const { data: stats } = useQuery({
         queryKey: ["student-stats", studentId],
         queryFn: async () => {
-            const { data } = await api.from("student_attendance").select("status").eq("student_id", studentId);
+            const data = await attendanceApi.getStudentAttendance({ student_id: studentId });
             const total = data?.length || 0;
             const present = data?.filter((r: {status: string}) => r.status === 'present').length || 0;
             const rate = total ? Math.round((present / total) * 100) : 0;
@@ -321,56 +323,35 @@ function AttendanceHistoryTab({ studentId }: { studentId: string }) {
     const { data: history, isLoading } = useQuery({
         queryKey: ["student-attendance-history", studentId],
         queryFn: async () => {
-            // Fetch attendance + session info
-            const { data: attendanceData } = await api
-                .from("student_attendance")
-                .select(`
-                    status, 
-                    marked_at,
-                    session_id,
-                    sessions (
-                        session_date,
-                        location
-                    )
-                `)
-                .eq("student_id", studentId)
-                .order("marked_at", { ascending: false });
+            const attendanceData = await attendanceApi.getStudentAttendance({ student_id: studentId });
+            if (!attendanceData.length) return [];
 
-            if (!attendanceData) return [];
+            const sessionIds = attendanceData.map((a: any) => a.session_id);
 
-            const sessionIds = attendanceData.map((a:StudentAttendenceHistory) => a.session_id);
-
-            // Fetch assignments (who was assigned?)
-            const { data: assignments } = await api
-                .from("session_assignments")
-                .select("session_id, volunteer_id") // removed nested fetch
-                .eq("student_id", studentId)
-                .in("session_id", sessionIds);
-
-            // Manually fetch volunteer names to support demo client limitations
+            // Fetch assignments for this student
             const assignmentMap: Record<string, string> = {};
-
-            if (assignments?.length) {
-                const volunteerIds = [...new Set(assignments.map((a: {volunteer_id: string}) => a.volunteer_id))];
-
-                // Fetch names separate from assignments
-                const { data: volunteers } = await api
-                    .from("volunteers")
-                    .select("id, name")
-                    .in("id", volunteerIds);
-
-                const volNameMap: Record<string, string> = {};
-                volunteers?.forEach((v: {name: string, id: string}) => volNameMap[v.id] = v.name);
-
-                assignments.forEach((a: {volunteer_id: string, session_id: string}) => {
-                    const volName = volNameMap[a.volunteer_id] || "Unknown Volunteer";
-                    assignmentMap[a.session_id] = volName;
+            try {
+                const { data: assignments } = await apiClient.get("/attendance/assignments", {
+                    params: { student_id: studentId },
                 });
+                if (assignments?.length) {
+                    const allVols = await volunteersApi.getAll();
+                    const volNameMap: Record<string, string> = {};
+                    allVols.forEach((v: any) => { volNameMap[v.id] = v.name; });
+
+                    assignments.forEach((a: any) => {
+                        if (sessionIds.includes(a.session_id)) {
+                            assignmentMap[a.session_id] = volNameMap[a.volunteer_id] || "Unknown Volunteer";
+                        }
+                    });
+                }
+            } catch {
+                // assignments endpoint might not exist — continue without it
             }
 
-            return attendanceData.map((record: StudentAttendenceHistory) => ({
-                date: record.sessions?.session_date,
-                location: record.sessions?.location,
+            return attendanceData.map((record: any) => ({
+                date: record.sessions?.session_date ?? null,
+                location: record.sessions?.location ?? null,
                 status: record.status,
                 assignedVolunteer: assignmentMap[record.session_id] || "No specific volunteer"
             }));
@@ -383,7 +364,7 @@ function AttendanceHistoryTab({ studentId }: { studentId: string }) {
 
     return (
         <div className="space-y-4">
-            {history.map((record: StudentAttendenceHistory, i: number) => (
+            {history.map((record: any, i: number) => (
                 <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-card border rounded-lg shadow-sm hover:shadow-md transition-shadow">
                     <div className="flex items-start gap-4 mb-2 sm:mb-0">
                         <div className="p-2 bg-primary/10 rounded-full text-primary mt-1">
