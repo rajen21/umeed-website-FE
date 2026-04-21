@@ -1,6 +1,8 @@
+import { Provider } from 'react-redux'
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { Provider } from 'react-redux'
+
+// components
 import { Toaster } from "./components/ui/toaster";
 import { Toaster as Sonner } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
@@ -8,9 +10,11 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { PublicLayout } from "./components/layout/PublicLayout";
 import { DashboardLayout } from "./components/dashboard/DashboardLayout";
+import { ScrollToTop } from "./components/ScrollToTop";
+
+// pages
 import Index from "./pages/Index";
 import About from "./pages/About";
-
 import Programs from "./pages/Programs";
 import Events from "./pages/Events";
 import Notices from "./pages/Notices";
@@ -30,13 +34,12 @@ import EventsPage from "./pages/dashboard/EventsPage";
 import ApplicationsPage from "./pages/dashboard/ApplicationsPage";
 import ReportsPage from "./pages/dashboard/ReportsPage";
 import SettingsPage from "./pages/dashboard/SettingsPage";
-
 import ProfilePage from "./pages/dashboard/ProfilePage";
 
-import { ScrollToTop } from "./components/ScrollToTop";
 import { SiteContentProvider } from "./contexts/SiteContentContext";
-import SiteCustomizationPage from "./pages/dashboard/SiteCustomizationPage";
+// mics
 import { store } from "./store/store";
+import SiteCustomizationPage from "./pages/dashboard/SiteCustomizationPage";
 
 const queryClient = new QueryClient();
 
