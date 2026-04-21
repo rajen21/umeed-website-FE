@@ -16,7 +16,10 @@ import {
     DialogFooter,
 } from "../../components/ui/dialog";
 import { Pencil, Loader2, FileText, Briefcase, Clock, Lock } from "lucide-react";
-import { api } from "../../lib/api";
+import { authApi } from "../../services/authApi";
+import { volunteersApi } from "../../services/volunteersApi";
+import { attendanceApi } from "../../services/attendanceApi";
+import { mediaApi } from "../../services/mediaApi";
 import { VolunteerForm, type VolunteerFormData } from "../../components/volunteers/VolunteerForm";
 import { ImageCropDialog } from "../../components/profile/ImageCropDialog";
 import type { CustomError } from "../../types/common";
@@ -78,13 +81,7 @@ export default function ProfilePage() {
 
         setPasswordLoading(true);
         try {
-            const { error } = await api.auth.changePassword({
-                currentPassword: passwordForm.currentPassword,
-                newPassword: passwordForm.newPassword
-            });
-
-            if (error) throw error;
-
+            await authApi.changePassword(passwordForm.currentPassword, passwordForm.newPassword);
             toast({ title: "Password changed successfully" });
             setChangePasswordOpen(false);
             setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
@@ -109,25 +106,19 @@ export default function ProfilePage() {
     const fetchProfileData = async () => {
         setFetching(true);
         try {
-            const meta = user?.user_metadata || {};
             const basicData = {
-                fullName: meta.full_name || "",
+                fullName: user?.fullName || "",
                 email: user?.email || "",
-                phone: meta.phone || "",
-                location: meta.location || "",
-                bio: meta.bio || "",
-                avatarUrl: meta.avatar_url || "",
+                phone: "",
+                location: "",
+                bio: "",
+                avatarUrl: user?.avatarUrl || "",
                 volunteerId: "",
             };
 
             if (volunteerId) {
-                const { data: volData, error } = await api
-                    .from("volunteers")
-                    .select("*")
-                    .eq("id", volunteerId)
-                    .single();
-
-                if (volData && !error) {
+                try {
+                    const volData = await volunteersApi.getById(volunteerId) as any;
                     basicData.fullName = volData.name || basicData.fullName;
                     basicData.phone = volData.phone || basicData.phone;
                     basicData.location = volData.address || basicData.location;
@@ -154,13 +145,10 @@ export default function ProfilePage() {
                     setVolunteerStatus(volData.status || "approved");
 
                     // Fetch attendance count for probation tracker
-                    const { data: attendanceData } = await api
-                        .from("volunteer_attendance")
-                        .select("id")
-                        .eq("volunteer_id", volunteerId)
-                        .eq("status", "present");
-
-                    setAttendanceCount(attendanceData?.length || 0);
+                    const attendanceData = await attendanceApi.getVolunteerAttendance({ volunteer_id: volunteerId });
+                    setAttendanceCount(attendanceData.filter((a: any) => a.status === "present").length);
+                } catch {
+                    // Volunteer not found or fetch failed — continue with basic data
                 }
             }
             setFormData(basicData);
@@ -191,35 +179,15 @@ export default function ProfilePage() {
         try {
             setUploadingAvatar(true);
 
-            const fileExt = 'jpg';
-            const filePath = `${user?.id || 'unknown'}/${Date.now()}.${fileExt}`;
-
-            const { error: uploadError } = await api.storage
-                .from('avatars')
-                .upload(filePath, croppedImageBlob as File);
-
-            if (uploadError) throw uploadError;
-
-            const { data } = api.storage.from('avatars').getPublicUrl(filePath);
-            const publicUrl = data.publicUrl;
+            const filePath = `avatar_${user?.id || 'unknown'}_${Date.now()}.jpg`;
+            const uploaded = await mediaApi.upload(croppedImageBlob as File, filePath);
+            const publicUrl = mediaApi.getPublicUrl(uploaded.url);
 
             if (volunteerId) {
-                const { error: volUpdateError } = await api
-                    .from("volunteers")
-                    .update({ profile_picture: publicUrl })
-                    .eq("id", volunteerId);
-
-                if (volUpdateError) throw volUpdateError;
+                await volunteersApi.update(volunteerId, { profile_picture: publicUrl } as any);
             }
 
-            const { error: updateError } = await api.auth.updateUser({
-                data: { avatar_url: publicUrl }
-            });
-
-            if (updateError) throw updateError;
-
-            const { error: refreshError } = await api.auth.refreshSession();
-            if (refreshError) console.error("Error refreshing session:", refreshError);
+            await authApi.updateMe({ avatarUrl: publicUrl });
 
             // Force reload to ensure all components get the new image
             window.location.reload();
@@ -232,7 +200,7 @@ export default function ProfilePage() {
             console.error("Avatar upload error:", error);
             toast({
                 title: "Upload failed",
-                description: err.message || "Ensure 'avatars' bucket exists in storage.",
+                description: err.message || "Could not upload profile picture.",
                 variant: "destructive"
             });
         } finally {
@@ -245,37 +213,23 @@ export default function ProfilePage() {
         try {
             const { id, ...rest } = data;
             if (rest.email) rest.email = rest.email.trim().toLowerCase();
-            console.log(id);
-            
-            const { error } = await api
-                .from("volunteers")
-                .update({
-                    name: rest.name,
-                    email: rest.email,
-                    phone: rest.phone,
-                    address: rest.address,
-                    age: rest.age ? Number(rest.age) : null,
-                    gender: rest.gender,
-                    occupation: rest.occupation,
-                    skills: rest.skills,
-                    preferred_languages: rest.preferred_languages,
-                    availability: rest.availability,
-                    documents: rest.documents
-                })
-                .eq("id", volunteerId);
+            void id;
 
-            if (error) throw error;
+            await volunteersApi.update(volunteerId!, {
+                name: rest.name,
+                email: rest.email,
+                phone: rest.phone,
+                address: rest.address,
+                age: rest.age ? Number(rest.age) : null,
+                gender: rest.gender,
+                occupation: rest.occupation,
+                skills: rest.skills,
+                preferred_languages: rest.preferred_languages,
+                availability: rest.availability,
+                documents: rest.documents
+            } as any);
 
-            await api.auth.updateUser({
-                data: {
-                    full_name: rest.name,
-                    phone: rest?.phone,
-                    location: rest.address,
-                    bio: rest.occupation
-                }
-            });
-
-            await api.auth.refreshSession();
+            await authApi.updateMe({ fullName: rest.name });
 
             toast({ title: "Profile Updated", description: "Your details have been saved." });
             setIsEditOpen(false);
@@ -293,23 +247,7 @@ export default function ProfilePage() {
         e.preventDefault();
         setLoading(true);
         try {
-            const { error: authError } = await api.auth.updateUser({
-                // Standard attributes
-                data: {
-                    full_name: formData.fullName,
-                    // Custom attributes must be handled loosely if strict typing fails, or moved to separate update if not supported
-                } as {full_name: string}
-            });
-            // Update profile metadata via db if auth update doesn't support custom fields
-            if (user?.id) {
-                await api.from("volunteers").update({
-                    phone: formData.phone,
-                    address: formData.location,
-                    occupation: formData.bio
-                }).eq("user_id", user.id);
-            }
-            if (authError) throw authError;
-
+            await authApi.updateMe({ fullName: formData.fullName });
             toast({ title: "Profile updated" });
         } catch (error) {
           const err = error as CustomError

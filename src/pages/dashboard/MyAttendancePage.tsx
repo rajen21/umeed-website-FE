@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { api } from "../../lib/api";
+import { attendanceApi } from "../../services/attendanceApi";
 import { useAuth } from "../../contexts/AuthContext";
 import { Card, CardContent } from "../../components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
@@ -26,15 +26,8 @@ export default function MyAttendancePage() {
   const { data, isLoading } = useQuery({
     queryKey: ["my-attendance", volunteerId],
     enabled: !!volunteerId,
-    queryFn: async () => {
-      const { data, error } = await api
-        .from("volunteer_attendance")
-        .select("id, session_id, status, sessions(session_date, location)")
-        .eq("volunteer_id", volunteerId)
-        .order("marked_at", { ascending: false });
-      if (error) throw error;
-      return data as Row[];
-    },
+    queryFn: () =>
+      attendanceApi.getVolunteerAttendance({ volunteer_id: volunteerId! }) as Promise<Row[]>,
   });
 
   const filtered = useMemo(() => {
@@ -49,10 +42,12 @@ export default function MyAttendancePage() {
   }, [data, search]);
 
   const updateMutation = useMutation({
-    mutationFn: async (payload: { id: string; status: Row["status"] }) => {
-      const { error } = await api.from("volunteer_attendance").update({ status: payload.status }).eq("id", payload.id);
-      if (error) throw error;
-    },
+    mutationFn: (payload: { id: string; status: Row["status"] }) =>
+      attendanceApi.markVolunteerAttendance({
+        volunteer_id: volunteerId!,
+        session_id: payload.id,
+        status: payload.status,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-attendance", volunteerId] });
       toast({ title: "Attendance updated" });
