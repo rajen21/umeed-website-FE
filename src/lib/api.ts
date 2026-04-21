@@ -1,43 +1,12 @@
 /**
- * Local Database Client
+ * Central API re-export
  *
- * Unified client that replaces Supabase with local SQLite.
- * Provides the same API surface as Supabase client for compatibility.
+ * Import individual service modules directly for new code.
+ * This file only keeps narrow exports still needed by existing pages.
  */
+export { default as apiClient } from "./apiClient";
 
-import dbService from "../lib/dbService";
-import authService from "../lib/authService";
-import storageService from "../lib/storageService";
+// authService alias used by VolunteersPage / ApplicationsPage
+export { authApi as authService } from "../services/authApi";
 
-// Re-export types for compatibility
-export type { User, Session } from "../lib/authService";
-
-// Combined client interface
-export const api = {
-  // Database operations - matches api.from(table).select()...
-  from: dbService.from.bind(dbService),
-
-  // Auth operations - matches api.auth.signIn()...
-  auth: authService,
-
-  // Storage operations - matches api.storage.from(bucket)...
-  storage: storageService,
-
-  // Realtime channels (stub for compatibility)
-  // channel: (name: string) => ({
-  //   on: (_event: string, _filter: any, _callback: any) => ({
-  //     subscribe: () => ({ unsubscribe: () => {} }),
-  //   }),
-  //   subscribe: () => ({ unsubscribe: () => {} }),
-  // }),
-
-  // removeChannel: (_channel: any) => {},
-};
-
-// Demo mode is no longer needed - all data is local
 export const isDemoMode = false;
-
-// Export individual services for direct access
-export { dbService, authService, storageService };
-
-export default api;
