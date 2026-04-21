@@ -23,37 +23,24 @@ import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     Cell, Pie, PieChart as RePieChart, Legend
 } from "recharts";
-import { api } from "../../lib/api";
+import { sessionsApi } from "../../services/sessionsApi";
+import { volunteersApi } from "../../services/volunteersApi";
 import { useQuery } from "@tanstack/react-query";
 import type { Session } from "../../types/session";
-import type { Volunteer } from "../../types/volunteer";
 
 // Hook to fetch sessions (mix of recent past and upcoming)
 function useSessionsWithRSVPCounts() {
     return useQuery({
         queryKey: ["admin-sessions-rsvp-overview"],
         queryFn: async () => {
-            // We fetch a decent number to ensure we likely catch the 'next' session and some history
-            const { data, error } = await api
-                .from("sessions")
-                .select("*, session_rsvps(status)")
-                .order("session_date", { ascending: false }) // Newest (future) -> Oldest (past)
-                .limit(10);
-
-            if (error) throw error;
-
-            return data.map((session: Session) => {
-                const rsvps = session.session_rsvps || [];
-                return {
+            const allSessions = await sessionsApi.getAll();
+            return allSessions
+                .sort((a: Session, b: Session) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())
+                .slice(0, 10)
+                .map((session: Session) => ({
                     ...session,
-                    counts: {
-                        yes: rsvps.filter((r: any) => r.status === 'yes').length,
-                        maybe: rsvps.filter((r: any) => r.status === 'maybe').length,
-                        no: rsvps.filter((r: any) => r.status === 'no').length,
-                        total_responses: rsvps.length
-                    }
-                };
-            });
+                    counts: { yes: 0, maybe: 0, no: 0, total_responses: 0 }
+                }));
         }
     });
 }
@@ -62,25 +49,20 @@ function useVolunteerStatusStats() {
     return useQuery({
         queryKey: ["volunteer-status-distribution"],
         queryFn: async () => {
-            const { data, error } = await api
-                .from("volunteers")
-                .select("status");
-            if (error) throw error;
-
+            const vols = await volunteersApi.getAll();
             const counts = { approved: 0, pending: 0, rejected: 0 };
-            data?.forEach((v:Volunteer) => {
+            vols.forEach((v: any) => {
                 if (v.status === 'approved') counts.approved++;
                 else if (v.status === 'pending') counts.pending++;
                 else if (v.status === 'rejected') counts.rejected++;
             });
-
             return [
                 { name: 'Active', value: counts.approved, color: '#22c55e' },
                 { name: 'Pending', value: counts.pending, color: '#f59e0b' },
                 { name: 'Rejected', value: counts.rejected, color: '#ef4444' }
             ];
         }
-    })
+    });
 }
 
 export function AdminDashboard() {
@@ -288,7 +270,7 @@ export function AdminDashboard() {
             </div>
 
             {/* 4. Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {/* Attendance Area Chart (Larger) */}
                 <Card className="lg:col-span-2 shadow-md">
                     <CardHeader>
