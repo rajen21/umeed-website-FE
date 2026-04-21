@@ -7,7 +7,7 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Label } from "../components/ui/label";
 import { useToast } from "../hooks/use-toast";
-import { api } from "../lib/api";
+import { contactApi } from "../services/contactApi";
 
 const Contact = () => {
   const { toast } = useToast();
@@ -23,10 +23,7 @@ const Contact = () => {
     setIsSubmitting(true);
 
     try {
-      const { error } = await api
-        .from("contact_messages")
-        .insert({ name: formData.name, email: formData.email, message: formData.message });
-      if (error) throw error;
+      await contactApi.send({ name: formData.name, email: formData.email, message: formData.message });
 
       toast({
         title: "Message Sent!",

@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { useToast } from "../hooks/use-toast";
-import { api } from "../lib/api";
+import { applicationsApi } from "../services/applicationsApi";
 
 const benefits = [
   {
@@ -93,7 +93,7 @@ const Volunteer = () => {
       const skills_subjects = formData.skills;
       const preferred_languages = formData.languages;
 
-      const { error } = await api.from("volunteer_applications").insert({
+      await applicationsApi.create({
         full_name: formData.fullName,
         email: formData.email,
         phone: formData.phone,
@@ -107,7 +107,6 @@ const Volunteer = () => {
         preferred_languages: preferred_languages.length ? preferred_languages : null,
         status: "pending",
       });
-      if (error) throw error;
       setSubmitted(true);
     } catch (err) {
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" });

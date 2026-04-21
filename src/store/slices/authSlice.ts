@@ -152,7 +152,9 @@ const authSlice = createSlice({
     },
     setVolunteerInfo(
       state,
-      action: { payload: { volunteerId: string | null; volunteerStatus: string | null } },
+      action: {
+        payload: { volunteerId: string | null; volunteerStatus: string | null };
+      },
     ) {
       state.volunteerId = action.payload.volunteerId;
       state.volunteerStatus = action.payload.volunteerStatus;

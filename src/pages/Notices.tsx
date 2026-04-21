@@ -4,7 +4,7 @@ import { Bell, Calendar } from "lucide-react";
 import { Section } from "../components/ui/section";
 import { Badge } from "../components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { noticesApi } from "../services/noticesApi";
 import { format } from "date-fns";
 
 type PublicNotice = {
@@ -20,13 +20,12 @@ const Notices = () => {
   const { data, isLoading } = useQuery({
     queryKey: ["notices-public"],
     queryFn: async () => {
-      const { data, error } = await api
-        .from("notices")
-        .select("*")
-        .eq("visibility", "public")
-        .order("published_date", { ascending: false });
-      if (error) throw error;
-      return data as PublicNotice[];
+      const data = await noticesApi.getAll({ visibility: "public" });
+      return (data as PublicNotice[]).sort((a, b) => {
+        const dateA = a.published_date ? new Date(a.published_date).getTime() : 0;
+        const dateB = b.published_date ? new Date(b.published_date).getTime() : 0;
+        return dateB - dateA;
+      });
     },
   });
   const notices = data || [];
