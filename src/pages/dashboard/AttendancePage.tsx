@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { sessionsApi } from "../../services/sessionsApi";
+import { attendanceApi } from "../../services/attendanceApi";
+import { studentsApi } from "../../services/studentsApi";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { AttendanceMarking } from "../../components/attendance/AttendanceMarking";
 import { AttendanceHistory } from "../../components/attendance/AttendanceHistory";
@@ -14,19 +16,19 @@ export default function AttendancePage() {
     queryKey: ["attendance-page-stats"],
     queryFn: async () => {
       const [sessions, studentAttendance, volunteerAttendance, students] = await Promise.all([
-        api.from("sessions").select("id", { count: "exact" }),
-        api.from("student_attendance").select("id", { count: "exact" }).eq("status", "present"),
-        api.from("volunteer_attendance").select("id", { count: "exact" }).eq("status", "present"),
-        api.from("students").select("id", { count: "exact" }).eq("status", "active"),
-      ]) as [any, any, any, any];
+        sessionsApi.getAll(),
+        attendanceApi.getStudentAttendance({ status: "present" }),
+        attendanceApi.getVolunteerAttendance({ status: "present" }),
+        studentsApi.getAll({ status: "active" }),
+      ]);
 
-      const totalPresent = (studentAttendance.count || 0) + (volunteerAttendance.count || 0);
-
+      const totalSessions = sessions.length;
+      const totalPresent = studentAttendance.length + volunteerAttendance.length;
       return {
-        totalSessions: sessions.count || 0,
-        totalPresent: totalPresent,
-        activeStudents: students.count || 0,
-        avgAttendance: sessions.count ? Math.round(totalPresent / sessions.count) : 0
+        totalSessions,
+        totalPresent,
+        activeStudents: students.length,
+        avgAttendance: totalSessions ? Math.round(totalPresent / totalSessions) : 0,
       };
     }
   });
