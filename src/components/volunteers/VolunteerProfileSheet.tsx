@@ -9,7 +9,9 @@ import { format } from "date-fns";
 import { User, MapPin, Phone, Mail, Briefcase, Award, Calendar, Clock, Activity, Languages, FileText, RotateCcw, Trash2, Pencil, CheckCircle2, Check, X } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { volunteersApi } from "../../services/volunteersApi";
+import { attendanceApi } from "../../services/attendanceApi";
+import { mediaApi } from "../../services/mediaApi";
 import { toast } from "sonner";
 import { useAuth } from "../../contexts/AuthContext";
 import { ImageCropDialog } from "../../components/profile/ImageCropDialog";
@@ -31,7 +33,7 @@ import {
     DialogTitle,
 } from "../../components/ui/dialog";
 import { generateVolunteerId, getVolunteerSequentialNumber } from "../../lib/volunteerConfig";
-import type { Volunteer, VolunteerAttendenceHistory } from "../../types/volunteer";
+import type { Volunteer } from "../../types/volunteer";
 
 // Define locally to match VolunteersPage or import if moved to types
 
@@ -72,21 +74,10 @@ export function VolunteerProfileSheet({ volunteer, isOpen, onClose, onEdit }: Vo
             const fileExt = 'jpg';
             const filePath = `${volunteer?.id || 'unknown'}/${Date.now()}.${fileExt}`;
 
-            const { error: uploadError } = await api.storage
-                .from('avatars')
-                .upload(filePath, croppedImageBlob as File);
+            const uploaded = await mediaApi.upload(croppedImageBlob as File, filePath);
+            const publicUrl = mediaApi.getPublicUrl(uploaded.url);
 
-            if (uploadError) throw uploadError;
-
-            const { data } = api.storage.from('avatars').getPublicUrl(filePath);
-            const publicUrl = data.publicUrl;
-
-            const { error: updateError } = await api
-                .from("volunteers")
-                .update({ profile_picture: publicUrl })
-                .eq("id", volunteer?.id);
-
-            if (updateError) throw updateError;
+            await volunteersApi.update(volunteer!.id, { profile_picture: publicUrl });
 
             // Try to update auth metadata if user_id linked (best effort)
             if (volunteer?.user_id) {
@@ -118,13 +109,7 @@ export function VolunteerProfileSheet({ volunteer, isOpen, onClose, onEdit }: Vo
 
     const handleRevertToProbation = async () => {
         try {
-            const { error } = await api
-                .from('volunteers')
-                .update({ status: 'pending' })
-                .eq('id', volunteer.id);
-
-            if (error) throw error;
-
+            await volunteersApi.update(volunteer.id, { status: 'pending' } as any);
             await queryClient.invalidateQueries({ queryKey: ["volunteers"] });
             toast.success("Volunteer reverted to probation status");
             onClose();
@@ -139,12 +124,14 @@ export function VolunteerProfileSheet({ volunteer, isOpen, onClose, onEdit }: Vo
 
             // Check if ID is missing, if so, generate it
             if (!volunteer.volunteer_id) {
-                const { data: allVols } = await api.from('volunteers').select('volunteer_id');
+                const allVols = await volunteersApi.getAll();
                 let maxSeq = 0;
                 if (allVols) {
-                    allVols.forEach((v: {volunteer_id: string}) => {
-                        const seq = getVolunteerSequentialNumber(v.volunteer_id);
-                        if (seq > maxSeq) maxSeq = seq;
+                    allVols.forEach((v: any) => {
+                        if (v.volunteer_id) {
+                            const seq = getVolunteerSequentialNumber(v.volunteer_id);
+                            if (seq > maxSeq) maxSeq = seq;
+                        }
                     });
                 }
                 updateData.volunteer_id = generateVolunteerId(maxSeq);
@@ -155,13 +142,7 @@ export function VolunteerProfileSheet({ volunteer, isOpen, onClose, onEdit }: Vo
                 }
             }
 
-            const { error } = await api
-                .from('volunteers')
-                .update(updateData)
-                .eq('id', volunteer.id);
-
-            if (error) throw error;
-
+            await volunteersApi.update(volunteer.id, updateData as any);
             await queryClient.invalidateQueries({ queryKey: ["volunteers"] });
             toast.success("Volunteer approved (Probation Skipped)");
             onClose();
@@ -172,8 +153,7 @@ export function VolunteerProfileSheet({ volunteer, isOpen, onClose, onEdit }: Vo
 
     const handleDelete = async () => {
         try {
-            const { error } = await api.from('volunteers').delete().eq('id', volunteer.id);
-            if (error) throw error;
+            await volunteersApi.remove(volunteer.id);
             await queryClient.invalidateQueries({ queryKey: ["volunteers"] });
             toast.success("Volunteer deleted successfully");
             onClose();
@@ -388,13 +368,10 @@ function StatsSummary({ volunteerId }: { volunteerId: string }) {
     const { data: stats } = useQuery({
         queryKey: ["volunteer-stats", volunteerId],
         queryFn: async () => {
-            const { data } = await api
-                .from("volunteer_attendance")
-                .select("status")
-                .eq("volunteer_id", volunteerId);
+            const data = await attendanceApi.getVolunteerAttendance({ volunteer_id: volunteerId });
 
-            const total = data?.length || 0;
-            const present = data?.filter((r: {status: string}) => r.status === 'present').length || 0;
+            const total = data.length;
+            const present = data.filter((r: any) => r.status === 'present').length;
             const rate = total ? Math.round((present / total) * 100) : 0;
             return { total, present, rate };
         }
@@ -490,19 +467,14 @@ function DocumentsTab({ volunteer, onEdit }: { volunteer: Volunteer; onEdit?: (v
         const newDocs = [...volunteer.documents];
         newDocs[index] = { ...newDocs[index], name: editingName.trim() };
 
-        const { error } = await api
-            .from("volunteers")
-            .update({ documents: newDocs })
-            .eq("id", volunteer.id);
-
-        if (error) {
-            toast.error("Failed to rename document");
-        } else {
+        try {
+            await volunteersApi.update(volunteer.id, { documents: newDocs } as any);
             toast.success("Document renamed");
-            // Trigger refresh by calling onEdit with updated volunteer
             if (onEdit) {
                 onEdit({ ...volunteer, documents: newDocs });
             }
+        } catch {
+            toast.error("Failed to rename document");
         }
         setEditingIdx(null);
         setEditingName("");
@@ -513,18 +485,14 @@ function DocumentsTab({ volunteer, onEdit }: { volunteer: Volunteer; onEdit?: (v
 
         const newDocs = volunteer.documents.filter((_, i) => i !== index);
 
-        const { error } = await api
-            .from("volunteers")
-            .update({ documents: newDocs })
-            .eq("id", volunteer.id);
-
-        if (error) {
-            toast.error("Failed to delete document");
-        } else {
+        try {
+            await volunteersApi.update(volunteer.id, { documents: newDocs } as any);
             toast.success("Document deleted");
             if (onEdit) {
                 onEdit({ ...volunteer, documents: newDocs });
             }
+        } catch {
+            toast.error("Failed to delete document");
         }
     };
 
@@ -627,25 +595,12 @@ function AttendanceHistoryTab({ volunteerId }: { volunteerId: string }) {
     const { data: history, isLoading } = useQuery({
         queryKey: ["volunteer-attendance-history", volunteerId],
         queryFn: async () => {
-            const { data } = await api
-                .from("volunteer_attendance")
-                .select(`
-            status,
-            marked_at,
-            session_id,
-            sessions (
-            session_date,
-            location
-            )
-            `)
-                .eq("volunteer_id", volunteerId)
-                .order("marked_at", { ascending: false });
-
-            return data?.map((record: VolunteerAttendenceHistory) => ({
-                date: record.sessions?.session_date,
-                location: record.sessions?.location,
+            const data = await attendanceApi.getVolunteerAttendance({ volunteer_id: volunteerId });
+            return data.map((record: any) => ({
+                date: record.sessions?.session_date ?? null,
+                location: record.sessions?.location ?? null,
                 status: record.status,
-            })) || [];
+            }));
         }
     });
 
@@ -654,7 +609,7 @@ function AttendanceHistoryTab({ volunteerId }: { volunteerId: string }) {
 
     return (
         <div className="space-y-4">
-            {history.map((record: VolunteerAttendenceHistory, i: number) => (
+            {history.map((record: any, i: number) => (
                 <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-card border rounded-lg shadow-sm">
                     <div className="flex items-start gap-4 mb-2 sm:mb-0">
                         <div className="p-2 bg-primary/10 rounded-full text-primary mt-1">

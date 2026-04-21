@@ -18,7 +18,7 @@ import {
     DialogTitle,
     DialogFooter,
 } from "../../components/ui/dialog";
-import { api } from "../../lib/api";
+import { mediaApi } from "../../services/mediaApi";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Loader2, Upload, FileText, Trash2, ArrowRight, Pencil, Check, X } from "lucide-react";
@@ -157,23 +157,11 @@ export function VolunteerForm({
             const fileName = `${Math.random()}.${fileExt}`;
             const filePath = `${fileName}`;
 
-            // Check if storage is available
-            if (!api.storage) {
-                toast.warning("Storage not configured");
-                return;
-            }
-
-            const { error: uploadError } = await api.storage
-                .from("documents")
-                .upload(filePath, file);
-
-            if (uploadError) throw uploadError;
-
-            const { data } = api.storage.from("documents").getPublicUrl(filePath);
-
+            const uploaded = await mediaApi.upload(file, filePath);
+            const publicUrl = mediaApi.getPublicUrl(uploaded.url);
             const newDoc = {
                 name: file.name,
-                url: data.publicUrl,
+                url: publicUrl,
                 type: fileExt || "file"
             };
 
