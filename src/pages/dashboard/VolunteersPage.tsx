@@ -1,5 +1,5 @@
 import { sendApprovalEmail } from "../../services/emailService";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authService } from "../../lib/api";
 import { volunteersApi } from "../../services/volunteersApi";
@@ -35,9 +35,37 @@ import { Card, CardContent } from "../../components/ui/card";
 import { useToast } from "../../hooks/use-toast";
 import { useAuth } from "../../contexts/AuthContext";
 import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "../../components/ui/pagination";
 import { generateVolunteerId, getVolunteerSequentialNumber } from "../../lib/volunteerConfig";
 import type { CustomError } from "../../types/common";
 import type { Volunteer } from "../../types/volunteer";
+
+const PAGE_SIZE = 10;
+
+// Builds a windowed page-number list with ellipses, e.g. [1, "...", 4, 5, 6, "...", 12]
+function getPageNumbers(current: number, total: number): (number | "ellipsis")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+
+  const pages: (number | "ellipsis")[] = [1];
+  if (current > 3) pages.push("ellipsis");
+
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  for (let p = start; p <= end; p++) pages.push(p);
+
+  if (current < total - 2) pages.push("ellipsis");
+  pages.push(total);
+
+  return pages;
+}
 
 export default function VolunteersPage() {
   const { toast } = useToast();
@@ -45,9 +73,15 @@ export default function VolunteersPage() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedVolunteer, setSelectedVolunteer] = useState<Volunteer | null>(null);
+
+  // Reset back to page 1 whenever the search term or tab filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, activeTab]);
 
   // --- QUERIES ---
   const { data: volunteers, isLoading, isError, error } = useQuery({
@@ -132,6 +166,13 @@ export default function VolunteersPage() {
     return matchesSearch && matchesStatus;
   });
 
+  const totalPages = Math.max(1, Math.ceil((filteredVolunteers?.length || 0) / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedVolunteers = filteredVolunteers?.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
+
   // Stats for the top cards
   const stats = {
     total: volunteers?.length || 0,
@@ -162,7 +203,7 @@ export default function VolunteersPage() {
     console.log(attendance_count);
     
     // Ensure numeric fields
-    if (typeof payload.age === 'string' && payload.age.trim() === '') payload.age = null;
+    if (typeof payload.age === 'string' && payload.age.trim() === '') delete payload.age;
     else if (payload.age) payload.age = Number(payload.age);
 
     if (id) {
@@ -211,7 +252,6 @@ export default function VolunteersPage() {
         toast({ title: "Volunteer account created & email sent" });
       } catch (emailError) {
         console.error("Failed to send email", emailError);
-        toast({ title: "Volunteer added, but email failed", variant: "destructive" });
       }
     }
     setIsModalOpen(false);
@@ -312,7 +352,7 @@ export default function VolunteersPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredVolunteers?.map((volunteer: Volunteer) => (
+                    paginatedVolunteers?.map((volunteer: Volunteer) => (
                       <motion.tr
                         key={volunteer.id}
                         initial={{ opacity: 0 }}
@@ -383,6 +423,60 @@ export default function VolunteersPage() {
             </Table>
           </div>
         </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between p-4 border-t">
+            <p className="text-sm text-muted-foreground">
+              Page {safePage} of {totalPages} &middot; {filteredVolunteers?.length || 0} volunteers
+            </p>
+            <Pagination className="mx-0 w-auto">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (safePage > 1) setCurrentPage(safePage - 1);
+                    }}
+                    className={safePage <= 1 ? "pointer-events-none opacity-50" : undefined}
+                  />
+                </PaginationItem>
+
+                {getPageNumbers(safePage, totalPages).map((page, idx) =>
+                  page === "ellipsis" ? (
+                    <PaginationItem key={`ellipsis-${idx}`}>
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  ) : (
+                    <PaginationItem key={page}>
+                      <PaginationLink
+                        href="#"
+                        isActive={page === safePage}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setCurrentPage(page);
+                        }}
+                      >
+                        {page}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )
+                )}
+
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (safePage < totalPages) setCurrentPage(safePage + 1);
+                    }}
+                    className={safePage >= totalPages ? "pointer-events-none opacity-50" : undefined}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
       </Card>
 
       {/* --- MODALS --- */}

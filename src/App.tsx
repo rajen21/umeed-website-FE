@@ -28,6 +28,7 @@ import VolunteersPage from "./pages/dashboard/VolunteersPage";
 import SessionsPage from "./pages/dashboard/SessionsPage";
 import AttendancePage from "./pages/dashboard/AttendancePage";
 import MySessionsPage from "./pages/dashboard/MySessionsPage";
+import SessionDetailPage from "./pages/dashboard/SessionDetailPage";
 import MyAttendancePage from "./pages/dashboard/MyAttendancePage";
 import NoticesPage from "./pages/dashboard/NoticesPage";
 import EventsPage from "./pages/dashboard/EventsPage";
@@ -107,6 +108,7 @@ const App = () => {
                     />
                     <Route path="attendance" element={<AttendancePage />} />
                     <Route path="my-sessions" element={<MySessionsPage />} />
+                    <Route path="my-sessions/:id" element={<SessionDetailPage />} />
                     <Route path="my-attendance" element={<MyAttendancePage />} />
                     <Route
                       path="notices"

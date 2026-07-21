@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from "react";
+import { z } from "zod";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -23,6 +24,7 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Loader2, Upload, FileText, Trash2, ArrowRight, Pencil, Check, X } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
+import { cn } from "../../lib/utils";
 
 const SUBJECT_OPTIONS = [
     "Mathematics", "English", "Science", "Hindi",
@@ -31,13 +33,38 @@ const SUBJECT_OPTIONS = [
 
 const LANGUAGE_OPTIONS = ["English", "Gujarati", "Hindi", "Others"];
 
+// Mirrors the backend Joi rules in src/validators/volunteers.validator.ts
+const PHONE_REGEX = /^[0-9]{10}$/;
+
+const volunteerSchema = z.object({
+    name: z.string().trim().min(2, "Full name must be at least 2 characters").max(150, "Full name must be under 150 characters"),
+    email: z.string().trim().min(1, "Email is required").email("Enter a valid email address").max(150, "Email must be under 150 characters"),
+    phone: z.string().trim().min(1, "Phone number is required").regex(PHONE_REGEX, "Phone number must be exactly 10 digits"),
+    age: z.number({ error: "Age is required" }).int("Age must be a whole number").min(1, "Age must be at least 1").max(120, "Age must be 120 or below"),
+    gender: z.string().trim().min(1, "Gender is required"),
+    address: z.string().trim().min(1, "Address is required").max(500, "Address must be under 500 characters"),
+    occupation: z.string().trim().min(1, "Occupation is required").max(150, "Occupation must be under 150 characters"),
+    availability: z.string().min(1, "Availability is required"),
+    status: z.enum(["pending", "approved", "rejected", "inactive"]),
+    skills: z.array(z.string()).min(1, "Select at least one subject"),
+    preferred_languages: z.array(z.string()).min(1, "Select at least one language"),
+});
+
+type VolunteerFormErrors = Partial<Record<keyof z.infer<typeof volunteerSchema>, string>>;
+
+const TAB_FIELDS: Record<string, (keyof z.infer<typeof volunteerSchema>)[]> = {
+    personal: ["name", "email", "phone", "age", "gender", "address", "status"],
+    professional: ["occupation", "skills", "preferred_languages", "availability"],
+    documents: [],
+};
+
 export interface VolunteerFormData {
     id?: string;
     name: string;
     email: string;
     phone: string;
     address: string;
-    age: string | number | null;
+    age?: string | number | null;
     gender: string;
     occupation: string;
     skills: string[];
@@ -86,6 +113,7 @@ export function VolunteerForm({
     const [activeTab, setActiveTab] = useState("personal");
     const [editingDocIndex, setEditingDocIndex] = useState<number | null>(null);
     const [editingDocName, setEditingDocName] = useState("");
+    const [errors, setErrors] = useState<VolunteerFormErrors>({});
 
     // Reset form when opening or changing initialData
     useEffect(() => {
@@ -118,8 +146,77 @@ export function VolunteerForm({
                 setFormData(emptyVolunteer);
             }
             setActiveTab("personal");
+            setErrors({});
         }
     }, [isOpen, initialData]);
+
+    // Converts raw form state (strings from inputs) into the shape volunteerSchema validates
+    const normalizeForValidation = (data: VolunteerFormData) => {
+        const trimmedAge = typeof data.age === "string" ? data.age.trim() : data.age;
+        const age = trimmedAge === "" || trimmedAge === null || trimmedAge === undefined
+            ? undefined
+            : Number(trimmedAge);
+
+        return {
+            name: (data.name || "").trim(),
+            email: (data.email || "").trim(),
+            phone: (data.phone || "").trim(),
+            age,
+            gender: data.gender || "",
+            address: (data.address || "").trim(),
+            occupation: (data.occupation || "").trim(),
+            availability: data.availability || "",
+            status: data.status,
+            skills: data.skills || [],
+            preferred_languages: data.preferred_languages || [],
+        };
+    };
+
+    // Validates only the fields belonging to a given tab; returns true if that tab is clean
+    const validateTab = (tab: keyof typeof TAB_FIELDS): boolean => {
+        const result = volunteerSchema.safeParse(normalizeForValidation(formData));
+        const relevantFields = TAB_FIELDS[tab];
+        const tabErrors: VolunteerFormErrors = {};
+
+        if (!result.success) {
+            for (const issue of result.error.issues) {
+                const key = issue.path[0] as keyof VolunteerFormErrors;
+                if (relevantFields.includes(key) && !tabErrors[key]) tabErrors[key] = issue.message;
+            }
+        }
+
+        setErrors((prev) => {
+            const next = { ...prev };
+            relevantFields.forEach((f) => delete next[f]);
+            return { ...next, ...tabErrors };
+        });
+
+        return Object.keys(tabErrors).length === 0;
+    };
+
+    // Validates the whole form; on failure, jumps to the first tab containing an error
+    const validateAll = (): boolean => {
+        const result = volunteerSchema.safeParse(normalizeForValidation(formData));
+        if (result.success) {
+            setErrors({});
+            return true;
+        }
+
+        const allErrors: VolunteerFormErrors = {};
+        let firstTab: keyof typeof TAB_FIELDS | null = null;
+        for (const issue of result.error.issues) {
+            const key = issue.path[0] as keyof VolunteerFormErrors;
+            if (!allErrors[key]) allErrors[key] = issue.message;
+            if (!firstTab) {
+                firstTab = (Object.keys(TAB_FIELDS) as (keyof typeof TAB_FIELDS)[])
+                    .find((tab) => TAB_FIELDS[tab].includes(key)) || "personal";
+            }
+        }
+
+        setErrors(allErrors);
+        if (firstTab) setActiveTab(firstTab);
+        return false;
+    };
 
     // Auto-focus first field when tab changes
     useEffect(() => {
@@ -132,6 +229,13 @@ export function VolunteerForm({
 
     const handleInputChange = (field: keyof VolunteerFormData, value: string) => {
         setFormData({ ...formData, [field]: value });
+        if (errors[field as keyof VolunteerFormErrors]) {
+            setErrors((prev) => {
+                const next = { ...prev };
+                delete next[field as keyof VolunteerFormErrors];
+                return next;
+            });
+        }
     }
 
     const toggleArrayItem = (field: 'skills' | 'preferred_languages', item: string) => {
@@ -140,10 +244,18 @@ export function VolunteerForm({
             ? currentItems.filter(i => i !== item)
             : [...currentItems, item];
         setFormData({ ...formData, [field]: newItems });
+        if (errors[field]) {
+            setErrors((prev) => {
+                const next = { ...prev };
+                delete next[field];
+                return next;
+            });
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!validateAll()) return;
         await onSubmit(formData);
     }
 
@@ -210,8 +322,11 @@ export function VolunteerForm({
 
     const handleNext = (e: React.MouseEvent) => {
         e.preventDefault();
-        if (activeTab === "personal") setActiveTab("professional");
-        else if (activeTab === "professional") setActiveTab("documents");
+        if (activeTab === "personal") {
+            if (validateTab("personal")) setActiveTab("professional");
+        } else if (activeTab === "professional") {
+            if (validateTab("professional")) setActiveTab("documents");
+        }
     };
 
     return (
@@ -223,7 +338,7 @@ export function VolunteerForm({
                     </DialogTitle>
                 </DialogHeader>
 
-                <form onSubmit={handleSubmit} className="space-y-6">
+                <form onSubmit={handleSubmit} noValidate className="space-y-6">
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                         <TabsList className="w-full justify-start h-auto p-1 bg-muted rounded-md overflow-x-auto flex-nowrap hidden sm:grid sm:grid-cols-3">
                             <TabsTrigger value="personal">Personal Info</TabsTrigger>
@@ -241,30 +356,43 @@ export function VolunteerForm({
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="name">Full Name <span className="text-destructive">*</span></Label>
-                                    <Input id="name" value={formData.name} onChange={(e) => handleInputChange("name", e.target.value)} required />
+                                    <Input id="name" value={formData.name} onChange={(e) => handleInputChange("name", e.target.value)} className={cn(errors.name && "border-destructive focus-visible:ring-destructive")} />
+                                    {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
-                                    <Input id="email" type="email" value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} required />
+                                    <Input id="email" type="email" value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} className={cn(errors.email && "border-destructive focus-visible:ring-destructive")} />
+                                    {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="phone">Phone</Label>
-                                    <Input id="phone" value={formData.phone} onChange={(e) => handleInputChange("phone", e.target.value)} />
+                                    <Label htmlFor="phone">Phone <span className="text-destructive">*</span></Label>
+                                    <Input
+                                        id="phone"
+                                        type="tel"
+                                        inputMode="numeric"
+                                        maxLength={10}
+                                        value={formData.phone}
+                                        onChange={(e) => handleInputChange("phone", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                                        className={cn(errors.phone && "border-destructive focus-visible:ring-destructive")}
+                                    />
+                                    {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="age">Age</Label>
-                                    <Input id="age" type="number" value={formData.age ?? ''} onChange={(e) => handleInputChange("age", e.target.value)} />
+                                    <Label htmlFor="age">Age <span className="text-destructive">*</span></Label>
+                                    <Input id="age" type="number" value={formData.age ?? ''} onChange={(e) => handleInputChange("age", e.target.value)} className={cn(errors.age && "border-destructive focus-visible:ring-destructive")} />
+                                    {errors.age && <p className="text-sm text-destructive">{errors.age}</p>}
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="gender">Gender</Label>
+                                    <Label htmlFor="gender">Gender <span className="text-destructive">*</span></Label>
                                     <Select value={formData.gender} onValueChange={(v) => handleInputChange("gender", v)}>
-                                        <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
+                                        <SelectTrigger id="gender" className={cn(errors.gender && "border-destructive focus:ring-destructive")}><SelectValue placeholder="Select gender" /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="Male">Male</SelectItem>
                                             <SelectItem value="Female">Female</SelectItem>
                                             <SelectItem value="Other">Other</SelectItem>
                                         </SelectContent>
                                     </Select>
+                                    {errors.gender && <p className="text-sm text-destructive">{errors.gender}</p>}
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="status">Status</Label>
@@ -279,8 +407,9 @@ export function VolunteerForm({
                                     </Select>
                                 </div>
                                 <div className="space-y-2 md:col-span-2">
-                                    <Label htmlFor="address">Address</Label>
-                                    <Textarea id="address" value={formData.address} onChange={(e) => handleInputChange("address", e.target.value)} />
+                                    <Label htmlFor="address">Address <span className="text-destructive">*</span></Label>
+                                    <Textarea id="address" value={formData.address} onChange={(e) => handleInputChange("address", e.target.value)} className={cn(errors.address && "border-destructive focus-visible:ring-destructive")} />
+                                    {errors.address && <p className="text-sm text-destructive">{errors.address}</p>}
                                 </div>
                             </div>
                         </TabsContent>
@@ -288,12 +417,13 @@ export function VolunteerForm({
                         <TabsContent value="professional" className="space-y-4 pt-4">
                             <div className="grid grid-cols-1 gap-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="occupation">Occupation</Label>
-                                    <Input id="occupation" value={formData.occupation} onChange={(e) => handleInputChange("occupation", e.target.value)} />
+                                    <Label htmlFor="occupation">Occupation <span className="text-destructive">*</span></Label>
+                                    <Input id="occupation" value={formData.occupation} onChange={(e) => handleInputChange("occupation", e.target.value)} className={cn(errors.occupation && "border-destructive focus-visible:ring-destructive")} />
+                                    {errors.occupation && <p className="text-sm text-destructive">{errors.occupation}</p>}
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label>Subjects You Can Teach</Label>
+                                    <Label>Subjects You Can Teach <span className="text-destructive">*</span></Label>
                                     <div className="flex flex-wrap gap-2 mt-1">
                                         {SUBJECT_OPTIONS.map(subject => (
                                             <Badge
@@ -306,10 +436,11 @@ export function VolunteerForm({
                                             </Badge>
                                         ))}
                                     </div>
+                                    {errors.skills && <p className="text-sm text-destructive">{errors.skills}</p>}
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label>Preferred Languages</Label>
+                                    <Label>Preferred Languages <span className="text-destructive">*</span></Label>
                                     <div className="flex flex-wrap gap-2 mt-1">
                                         {LANGUAGE_OPTIONS.map(lang => (
                                             <Badge
@@ -322,12 +453,13 @@ export function VolunteerForm({
                                             </Badge>
                                         ))}
                                     </div>
+                                    {errors.preferred_languages && <p className="text-sm text-destructive">{errors.preferred_languages}</p>}
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="availability">Availability</Label>
+                                    <Label htmlFor="availability">Availability <span className="text-destructive">*</span></Label>
                                     <Select value={formData.availability} onValueChange={(v) => handleInputChange("availability", v)}>
-                                        <SelectTrigger><SelectValue placeholder="Select availability" /></SelectTrigger>
+                                        <SelectTrigger id="availability" className={cn(errors.availability && "border-destructive focus:ring-destructive")}><SelectValue placeholder="Select availability" /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="Every Sunday">Every Sunday</SelectItem>
                                             <SelectItem value="Alternate Sundays">Alternate Sundays</SelectItem>
@@ -335,6 +467,7 @@ export function VolunteerForm({
                                             <SelectItem value="Flexible">Flexible / On Call</SelectItem>
                                         </SelectContent>
                                     </Select>
+                                    {errors.availability && <p className="text-sm text-destructive">{errors.availability}</p>}
                                 </div>
                             </div>
                         </TabsContent>

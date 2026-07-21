@@ -261,8 +261,23 @@ export function useVolunteerStats(volunteerId: string | null) {
             a.session_date.localeCompare(b.session_date),
           )[0] || null;
 
+      let userRsvp: string | null = null;
+      if (nextSessionData && (nextSessionData as any).rsvp_enabled) {
+        try {
+          const { data: rsvps } = await apiClient.get("/session_rsvps", {
+            params: { session_id: nextSessionData.id },
+          });
+          const mine = (rsvps || []).find(
+            (r: any) => r.volunteer_id === volunteerId,
+          );
+          userRsvp = mine?.status ?? null;
+        } catch {
+          userRsvp = null;
+        }
+      }
+
       const nextSession = nextSessionData
-        ? { ...nextSessionData, userRsvp: null }
+        ? { ...nextSessionData, userRsvp }
         : null;
 
       // Attendance chart (last 6 months)

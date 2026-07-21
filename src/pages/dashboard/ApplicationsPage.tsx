@@ -37,6 +37,19 @@ type Application = {
   created_at: string | null;
 };
 
+function parseArrayField(value: unknown): string[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 export default function ApplicationsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -46,6 +59,12 @@ export default function ApplicationsPage() {
   const { data: applications, isLoading } = useQuery({
     queryKey: ["applications"],
     queryFn: () => applicationsApi.getAll() as Promise<Application[]>,
+    select: (data) =>
+      data.map((app) => ({
+        ...app,
+        skills_subjects: parseArrayField(app.skills_subjects),
+        preferred_languages: parseArrayField(app.preferred_languages),
+      })),
   });
 
   const updateMutation = useMutation({
@@ -215,12 +234,16 @@ export default function ApplicationsPage() {
                           <Button size="sm" variant="ghost" onClick={() => setSelectedApp(app)}>
                             <Eye className="w-4 h-4 text-muted-foreground" />
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => updateMutation.mutate({ app: app, status: "approved" })}>
-                            Approve
-                          </Button>
-                          <Button size="sm" variant="ghost" className="text-destructive" onClick={() => updateMutation.mutate({ app: app, status: "rejected" })}>
-                            Reject
-                          </Button>
+                          {app.status === "pending" && (
+                            <>
+                              <Button size="sm" variant="outline" onClick={() => updateMutation.mutate({ app: app, status: "approved" })}>
+                                Approve
+                              </Button>
+                              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => updateMutation.mutate({ app: app, status: "rejected" })}>
+                                Reject
+                              </Button>
+                            </>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))

@@ -29,6 +29,16 @@ apiClient.interceptors.response.use(
       localStorage.removeItem("umeed-auth-session");
       window.location.href = "/login";
     }
+
+    // Surface the backend's error message (e.g. "User already exists") so
+    // every `err.message` / `(err as Error).message` call site downstream
+    // shows it instead of axios's generic "Request failed with status code…"
+    const backendMessage =
+      error.response?.data?.message ?? error.response?.data?.error;
+    if (backendMessage) {
+      error.message = backendMessage;
+    }
+
     return Promise.reject(error);
   },
 );
