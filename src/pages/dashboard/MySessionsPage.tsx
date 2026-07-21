@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { sessionsApi } from "../../services/sessionsApi";
 import { attendanceApi } from "../../services/attendanceApi";
 import { useAuth } from "../../contexts/AuthContext";
@@ -24,6 +25,7 @@ type AttendanceRecord = {
 
 export default function MySessionsPage() {
   const { volunteerId } = useAuth();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
 
   // Fetch all sessions
@@ -145,7 +147,11 @@ export default function MySessionsPage() {
                     </TableRow>
                   ) : filtered.length ? (
                     filtered.map((session) => (
-                      <TableRow key={session.id}>
+                      <TableRow
+                        key={session.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => navigate(`/dashboard/my-sessions/${session.id}`)}
+                      >
                         <TableCell className="font-medium">
                           {format(new Date(session.session_date), "PPP")}
                         </TableCell>

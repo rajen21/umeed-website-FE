@@ -128,7 +128,7 @@ export function VolunteerDashboard() {
                                     </div>
                                 )}
                                 <Button size="sm" variant="secondary" className="w-full bg-white/80 hover:bg-white shadow-sm" asChild>
-                                    <Link to={`/dashboard/sessions/${stats.nextSession.id}`}>
+                                    <Link to={`/dashboard/my-sessions/${stats.nextSession.id}`}>
                                         View Full Details <ArrowRight className="w-3 h-3 ml-2" />
                                     </Link>
                                 </Button>

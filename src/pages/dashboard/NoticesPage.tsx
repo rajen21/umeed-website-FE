@@ -31,7 +31,7 @@ const emptyNotice: Partial<Notice> = {
 };
 
 export default function NoticesPage() {
-  const { role } = useAuth();
+  const { isAdmin } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -122,7 +122,7 @@ export default function NoticesPage() {
           <h1 className="text-2xl font-bold text-foreground">Notices</h1>
           <p className="text-muted-foreground">Manage and publish announcements</p>
         </div>
-        {role === "admin" && (
+        {isAdmin && (
           <Button onClick={() => { resetForm(); setIsModalOpen(true); }}>
             <Plus className="w-4 h-4 mr-2" />
             New Notice
@@ -153,7 +153,7 @@ export default function NoticesPage() {
                     <TableHead className="px-6 py-3 text-xs uppercase font-semibold text-muted-foreground">Title</TableHead>
                     <TableHead className="px-6 py-3 text-xs uppercase font-semibold text-muted-foreground">Date</TableHead>
                     <TableHead className="px-6 py-3 text-xs uppercase font-semibold text-muted-foreground">Visibility</TableHead>
-                    {role === "admin" && (
+                    {isAdmin && (
                       <TableHead className="px-6 py-3 text-xs uppercase font-semibold text-muted-foreground text-right">Actions</TableHead>
                     )}
                   </TableRow>
@@ -161,7 +161,7 @@ export default function NoticesPage() {
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={role === "admin" ? 4 : 3} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={isAdmin ? 4 : 3} className="text-center py-8 text-muted-foreground">
                         Loading...
                       </TableCell>
                     </TableRow>
@@ -180,7 +180,7 @@ export default function NoticesPage() {
                             {notice.visibility}
                           </Badge>
                         </TableCell>
-                        {role === "admin" && (
+                        {isAdmin && (
                           <TableCell className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                               <Button
@@ -206,7 +206,7 @@ export default function NoticesPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={role === "admin" ? 4 : 3} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={isAdmin ? 4 : 3} className="text-center py-12 text-muted-foreground">
                         <div className="flex flex-col items-center gap-2">
                           <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
                             <Search className="w-6 h-6 text-muted-foreground/50" />
