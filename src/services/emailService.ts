@@ -1,48 +1,64 @@
-import emailjs from "@emailjs/browser";
-import { emailConfig } from "../config/emailConfig";
+import { callAppsScript, callAppsScriptSafe } from "./appsScriptService";
 
-// Initialize EmailJS immediately
-emailjs.init(emailConfig.publicKey);
+export const getLoginLink = () => `${window.location.origin}/login`;
 
 export const sendApprovalEmail = async (
   toEmail: string,
   toName: string,
   loginLink: string,
+  tempPassword = "umeed@123",
 ) => {
-  if (
-    emailConfig.serviceId === "YOUR_SERVICE_ID" ||
-    emailConfig.publicKey === "YOUR_PUBLIC_KEY"
-  ) {
-    console.warn("EmailJS not configured. Skipping email send.");
-    return { status: "skipped", message: "EmailJS not configured" };
-  }
-
-  const templateParams = {
-    to_email: toEmail,
-    to_name: toName,
-    login_link: loginLink,
-    message: `Congratulations! You have been selected as a volunteer. 
-
-Important: 
-1. You have been assigned a temporary password: **umeed@123**
-2. Login immediately here: ${loginLink}
-
-Note: You are currently on a probation period for your first 12 sessions.`,
-  };
-
-  console.log("Attempting to send email with params:", templateParams);
-
-  try {
-    const response = await emailjs.send(
-      emailConfig.serviceId,
-      emailConfig.templateId,
-      templateParams,
-      emailConfig.publicKey,
-    );
-    console.log("Email successfully sent!", response.status, response.text);
-    return { status: "success", response };
-  } catch (error) {
-    console.error("Failed to send email:", error);
-    throw error;
-  }
+  const result = await callAppsScript({
+    action: "send",
+    toEmail,
+    toName,
+    loginLink,
+    tempPassword,
+  });
+  return { status: "success", response: result };
 };
+
+export interface ApplicationSheetPayload {
+  applicationId: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  age?: string | number | null;
+  gender?: string | null;
+  address?: string;
+  occupation?: string | null;
+  skills?: string;
+  languages?: string;
+  availability?: string | null;
+  motivation?: string | null;
+  status?: string;
+}
+
+export const logApplicationToSheet = (data: ApplicationSheetPayload) =>
+  callAppsScriptSafe({
+    action: "logApplication",
+    timestamp: new Date().toISOString(),
+    applicationId: data.applicationId,
+    fullName: data.fullName,
+    email: data.email,
+    phone: data.phone || "",
+    age: data.age != null ? String(data.age) : "",
+    gender: data.gender || "",
+    address: data.address || "",
+    occupation: data.occupation || "",
+    skills: data.skills || "",
+    languages: data.languages || "",
+    availability: data.availability || "",
+    motivation: data.motivation || "",
+    status: data.status || "pending",
+  });
+
+export const updateApplicationStatusInSheet = (
+  applicationId: string,
+  status: string,
+) =>
+  callAppsScriptSafe({
+    action: "updateApplication",
+    applicationId,
+    status,
+  });

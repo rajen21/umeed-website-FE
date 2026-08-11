@@ -11,7 +11,7 @@ import { useToast } from "../../hooks/use-toast";
 import { format } from "date-fns";
 import { Input } from "../../components/ui/input";
 import { Eye } from "lucide-react";
-import { sendApprovalEmail } from "../../services/emailService";
+import { getLoginLink, sendApprovalEmail, updateApplicationStatusInSheet } from "../../services/emailService";
 import {
   Dialog,
   DialogContent,
@@ -109,14 +109,14 @@ export default function ApplicationsPage() {
     onSuccess: async (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["applications"] });
 
+      void updateApplicationStatusInSheet(variables.app.id, variables.status);
+
       if (variables.status === "approved") {
-        const loginLink = "http://172.20.10.3:8080/login";
+        const loginLink = getLoginLink();
 
-        // Fetch Official Email
-
-        // Send Email via EmailJS
+        // Send email via Google Apps Script
         try {
-          await sendApprovalEmail(
+          const emailResult = await sendApprovalEmail(
             variables.app.email,
             variables.app.full_name,
             loginLink
@@ -130,7 +130,7 @@ export default function ApplicationsPage() {
                   ✅ Volunteer Profile Created
                 </span>
                 <span className="flex items-center gap-2">
-                  📧 Email Invitation Sent
+                  📧 Email sent to {emailResult.response?.sentTo || variables.app.email}
                 </span>
               </div>
             ),
@@ -138,7 +138,7 @@ export default function ApplicationsPage() {
           });
 
         } catch (error: any) {
-          console.error("EmailJS Error:", error);
+          console.error("Email send error:", error);
           toast({
             title: "Email Sending Failed",
             description: `Attempted to send to: '${variables.app.email}'. Error: ${error?.text || error?.message || "Unknown error"}.`,
