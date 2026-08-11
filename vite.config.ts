@@ -18,12 +18,19 @@ function appsScriptProxy(appsScriptUrl: string): Plugin {
       server.middlewares.use("/apps-script", async (req, res) => {
         if (!appsScriptUrl) {
           res.statusCode = 503;
-          res.end(JSON.stringify({ success: false, error: "Apps Script URL not configured" }));
+          res.end(
+            JSON.stringify({
+              success: false,
+              error: "Apps Script URL not configured",
+            }),
+          );
           return;
         }
 
         try {
-          const query = req.url?.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+          const query = req.url?.includes("?")
+            ? req.url.slice(req.url.indexOf("?"))
+            : "";
           const targetUrl = `${appsScriptUrl}${query}`;
 
           if (req.method === "POST") {
@@ -57,7 +64,8 @@ function appsScriptProxy(appsScriptUrl: string): Plugin {
           res.end(
             JSON.stringify({
               success: false,
-              error: error instanceof Error ? error.message : "Proxy request failed",
+              error:
+                error instanceof Error ? error.message : "Proxy request failed",
             }),
           );
         }
