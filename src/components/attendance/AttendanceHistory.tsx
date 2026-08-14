@@ -47,7 +47,7 @@ export function AttendanceHistory() {
                 person_id: r.student_id,
                 name: r.students?.full_name || "Unknown",
                 type: "student",
-                date: r.sessions?.session_date ?? r.session_id,
+                date: r.sessions?.session_date ?? "",
                 status: r.status,
                 marked_at: r.marked_at,
             }));
@@ -57,7 +57,7 @@ export function AttendanceHistory() {
                 person_id: r.volunteer_id,
                 name: r.volunteers?.name || "Unknown",
                 type: "volunteer",
-                date: r.sessions?.session_date ?? r.session_id,
+                date: r.sessions?.session_date ?? "",
                 status: r.status,
                 marked_at: r.marked_at,
             }));
@@ -219,7 +219,7 @@ export function AttendanceHistory() {
                                 filteredRecords.map((r) => (
                                     <TableRow key={`${r.type}-${r.id}`} className="hover:bg-secondary/20">
                                         <TableCell className="font-medium">
-                                            {r.date ? format(new Date(r.date), "MMM dd, yyyy") : "N/A"}
+                                            {r.date && !isNaN(new Date(r.date).getTime()) ? format(new Date(r.date), "MMM dd, yyyy") : "N/A"}
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">

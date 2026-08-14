@@ -20,7 +20,14 @@ export const attendanceApi = {
     student_id: string;
     session_id: string;
     status: string;
-  }) => apiClient.post("/student_attendance", data).then((r) => r.data),
+  }) =>
+    apiClient
+      .post("/student_attendance", {
+        studentId: data.student_id,
+        sessionId: data.session_id,
+        status: data.status,
+      })
+      .then((r) => r.data),
 
   // Volunteer attendance (uses alias route)
   getVolunteerAttendance: (params?: Record<string, string | undefined>) =>
@@ -32,7 +39,14 @@ export const attendanceApi = {
     volunteer_id: string;
     session_id: string;
     status: string;
-  }) => apiClient.post("/volunteer_attendance", data).then((r) => r.data),
+  }) =>
+    apiClient
+      .post("/volunteer_attendance", {
+        volunteerId: data.volunteer_id,
+        sessionId: data.session_id,
+        status: data.status,
+      })
+      .then((r) => r.data),
 
   // Session assignments (via attendance module)
   getAssignments: (sessionId: string) =>
