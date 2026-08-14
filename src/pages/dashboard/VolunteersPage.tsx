@@ -1,4 +1,4 @@
-import { sendApprovalEmail } from "../../services/emailService";
+import { getLoginLink, sendApprovalEmail } from "../../services/emailService";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authService } from "../../lib/api";
@@ -247,7 +247,7 @@ export default function VolunteersPage() {
 
       // 3. Send welcome email
       try {
-        const loginLink = "http://172.20.10.3:8080/login";
+        const loginLink = getLoginLink();
         await sendApprovalEmail(payload.email, payload.name, loginLink);
         toast({ title: "Volunteer account created & email sent" });
       } catch (emailError) {
