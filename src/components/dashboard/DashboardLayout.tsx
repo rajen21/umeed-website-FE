@@ -33,6 +33,7 @@ function DashboardLayoutContent() {
   const touchStartRef = useRef<number | null>(null);
   const [volunteerName, setVolunteerName] = useState<string | null>(null);
   const [volunteerAvatar, setVolunteerAvatar] = useState<string | null>(null);
+  const [volunteerAvatarReady, setVolunteerAvatarReady] = useState(false);
 
   // Notification Logic
   const { data: notifications } = useNotifications(10, role === "admin" ? undefined : "internal");
@@ -71,7 +72,10 @@ function DashboardLayoutContent() {
   // Fetch volunteer name and avatar
   useEffect(() => {
     const fetchVolunteerData = async () => {
-      if (!user?.email) return;
+      if (!user?.email) {
+        setVolunteerAvatarReady(true);
+        return;
+      }
 
       try {
         const vols = await volunteersApi.getAll({ email: user.email });
@@ -82,6 +86,8 @@ function DashboardLayoutContent() {
         }
       } catch {
         // ignore fetch errors silently
+      } finally {
+        setVolunteerAvatarReady(true);
       }
     };
 
@@ -190,7 +196,7 @@ function DashboardLayoutContent() {
                   <Button variant="ghost" className="relative h-9 w-9 rounded-full">
                     <Avatar className="h-9 w-9 border border-border">
                       <AvatarImage
-                        src={volunteerAvatar || user?.avatarUrl || "/placeholder-avatar.jpg"}
+                        src={volunteerAvatarReady ? (volunteerAvatar || user?.avatarUrl || "/placeholder-avatar.jpg") : undefined}
                         alt={user?.email || "User"}
                         className="object-cover"
                       />
