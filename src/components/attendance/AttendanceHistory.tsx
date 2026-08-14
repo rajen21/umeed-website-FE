@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { attendanceApi } from "../../services/attendanceApi";
+import { sessionsApi } from "../../services/sessionsApi";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { Card, CardContent} from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
@@ -37,17 +38,22 @@ export function AttendanceHistory() {
     const { data: records, isLoading } = useQuery({
         queryKey: ["attendance-history-all"],
         queryFn: async () => {
-            const [studentsData, volunteersData] = await Promise.all([
+            const [studentsData, volunteersData, sessionsData] = await Promise.all([
                 attendanceApi.getStudentAttendance(),
                 attendanceApi.getVolunteerAttendance(),
+                sessionsApi.getAll(),
             ]);
+
+            const sessionDateById = new Map(
+                (sessionsData as any[]).map((s: any) => [s.id, s.session_date])
+            );
 
             const studentRecords: AttendanceRecord[] = (studentsData as any[]).map((r: any) => ({
                 id: r.id,
                 person_id: r.student_id,
-                name: r.students?.full_name || "Unknown",
+                name: r.student?.full_name || "Unknown",
                 type: "student",
-                date: r.sessions?.session_date ?? "",
+                date: sessionDateById.get(r.session_id) ?? "",
                 status: r.status,
                 marked_at: r.marked_at,
             }));
@@ -55,9 +61,9 @@ export function AttendanceHistory() {
             const volunteerRecords: AttendanceRecord[] = (volunteersData as any[]).map((r: any) => ({
                 id: r.id,
                 person_id: r.volunteer_id,
-                name: r.volunteers?.name || "Unknown",
+                name: r.volunteer?.name || "Unknown",
                 type: "volunteer",
-                date: r.sessions?.session_date ?? "",
+                date: sessionDateById.get(r.session_id) ?? "",
                 status: r.status,
                 marked_at: r.marked_at,
             }));
