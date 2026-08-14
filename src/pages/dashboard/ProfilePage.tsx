@@ -124,6 +124,7 @@ export default function ProfilePage() {
                     basicData.location = volData.address || basicData.location;
                     basicData.bio = volData.occupation || basicData.bio;
                     basicData.volunteerId = volData.volunteer_id || "";
+                    basicData.avatarUrl = volData.profile_picture || basicData.avatarUrl;
 
                     setVolunteerData({
                         id: volData.id,
