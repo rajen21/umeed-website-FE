@@ -89,11 +89,16 @@ const Contact = () => {
                 </div>
                 <div>
                   <h4 className="font-semibold text-foreground mb-1">Address</h4>
-                  <p className="text-muted-foreground text-sm">
+                  <a
+                    href="https://www.google.com/maps/search/?api=1&query=National%20Institute%20of%20Design%2C%20Paldi%2C%20Ahmedabad"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-muted-foreground text-sm hover:text-primary transition-colors"
+                  >
                     Near NID, Paldi
                     <br />
                     Ahmedabad
-                  </p>
+                  </a>
                 </div>
               </div>
 
@@ -103,7 +108,12 @@ const Contact = () => {
                 </div>
                 <div>
                   <h4 className="font-semibold text-foreground mb-1">Phone</h4>
-                  <p className="text-muted-foreground text-sm">+91 98765 43210</p>
+                  <a
+                    href="tel:+919876543210"
+                    className="text-muted-foreground text-sm hover:text-primary transition-colors"
+                  >
+                    +91 98765 43210
+                  </a>
                 </div>
               </div>
 
@@ -113,9 +123,12 @@ const Contact = () => {
                 </div>
                 <div>
                   <h4 className="font-semibold text-foreground mb-1">Email</h4>
-                  <p className="text-muted-foreground text-sm">
-                    hello@umeedfoundation.org
-                  </p>
+                  <a
+                    href="mailto:umeedchildfoundation@gmail.com"
+                    className="text-muted-foreground text-sm hover:text-primary transition-colors break-all"
+                  >
+                    umeedchildfoundation@gmail.com
+                  </a>
                 </div>
               </div>
 
@@ -157,7 +170,7 @@ const Contact = () => {
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
                     }
-                    placeholder="John Doe"
+                    placeholder="Enter your full name"
                     required
                   />
                 </div>
@@ -170,7 +183,7 @@ const Contact = () => {
                     onChange={(e) =>
                       setFormData({ ...formData, email: e.target.value })
                     }
-                    placeholder="john@example.com"
+                    placeholder="Enter your email address"
                     required
                   />
                 </div>
