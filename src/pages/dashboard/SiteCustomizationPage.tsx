@@ -99,19 +99,17 @@ const sections: ContentSection[] = [
         fields: [
             { key: 'address', label: 'Address', type: 'text', placeholder: 'Near NID, Paldi, Ahmedabad' },
             { key: 'phone', label: 'Phone Number', type: 'text', placeholder: '+91 98765 43210' },
-            { key: 'email', label: 'Email Address', type: 'text', placeholder: 'hello@umeedfoundation.org' },
+            { key: 'email', label: 'Email Address', type: 'text', placeholder: 'umeedchildfoundation@gmail.com' },
         ]
     },
     {
         id: 'social',
         title: 'Social Links',
-        description: 'Add your social media URLs',
+        description: 'Add Instagram and LinkedIn profile URLs',
         icon: Share2,
         fields: [
-            { key: 'facebook', label: 'Facebook URL', type: 'text', placeholder: 'https://facebook.com/...' },
             { key: 'instagram', label: 'Instagram URL', type: 'text', placeholder: 'https://instagram.com/...' },
-            { key: 'twitter', label: 'Twitter/X URL', type: 'text', placeholder: 'https://twitter.com/...' },
-            { key: 'youtube', label: 'YouTube URL', type: 'text', placeholder: 'https://youtube.com/...' },
+            { key: 'linkedin', label: 'LinkedIn URL', type: 'text', placeholder: 'https://linkedin.com/in/...' },
         ]
     },
     {
