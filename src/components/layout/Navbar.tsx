@@ -160,7 +160,7 @@ export function Navbar() {
               <div className="pt-4 space-y-2">
                 <div className="flex items-center justify-between px-4 pb-2">
                   <span className="text-sm font-medium text-muted-foreground">Theme</span>
-                  <ModeToggle />
+                  <ModeToggle onToggle={() => setIsOpen(false)} />
                 </div>
                 {user ? (
                   <>
