@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { z } from "zod";
+import { useAuth } from "../../contexts/AuthContext";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -108,6 +109,7 @@ export function VolunteerForm({
     initialData,
     isLoading,
 }: VolunteerFormProps) {
+    const { isAdmin } = useAuth();
     const [formData, setFormData] = useState<VolunteerFormData>(emptyVolunteer);
     const [uploading, setUploading] = useState(false);
     const [activeTab, setActiveTab] = useState("personal");
@@ -361,7 +363,7 @@ export function VolunteerForm({
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
-                                    <Input id="email" type="email" value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} className={cn(errors.email && "border-destructive focus-visible:ring-destructive")} />
+                                    <Input id="email" type="email" value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} disabled={!isAdmin} className={cn(errors.email && "border-destructive focus-visible:ring-destructive")} />
                                     {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
                                 </div>
                                 <div className="space-y-2">
@@ -384,7 +386,7 @@ export function VolunteerForm({
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="gender">Gender <span className="text-destructive">*</span></Label>
-                                    <Select value={formData.gender} onValueChange={(v) => handleInputChange("gender", v)}>
+                                    <Select value={formData.gender} onValueChange={(v) => handleInputChange("gender", v)} disabled={!isAdmin}>
                                         <SelectTrigger id="gender" className={cn(errors.gender && "border-destructive focus:ring-destructive")}><SelectValue placeholder="Select gender" /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="Male">Male</SelectItem>
@@ -396,7 +398,7 @@ export function VolunteerForm({
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="status">Status</Label>
-                                    <Select value={formData.status} onValueChange={(v) => handleInputChange("status", v as any)}>
+                                    <Select value={formData.status} onValueChange={(v) => handleInputChange("status", v as any)} disabled={!isAdmin}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="pending">Pending</SelectItem>
