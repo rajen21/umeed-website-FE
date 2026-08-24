@@ -127,7 +127,7 @@ export function VolunteerDashboard() {
                                         </div>
                                     </div>
                                 )}
-                                <Button size="sm" variant="secondary" className="w-full bg-white/80 hover:bg-white shadow-sm" asChild>
+                                <Button size="sm" variant="outline" className="w-full border-primary text-primary hover:bg-primary/10" asChild>
                                     <Link to={`/dashboard/my-sessions/${stats.nextSession.id}`}>
                                         View Full Details <ArrowRight className="w-3 h-3 ml-2" />
                                     </Link>
