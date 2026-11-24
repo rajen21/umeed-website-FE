@@ -1,17 +1,25 @@
 import apiClient from "../lib/apiClient";
-import type { Student } from "../types/student";
+import type {
+  Student,
+  StudentCreateApiBody,
+  StudentLocation,
+  StudentUpdateInput,
+} from "../types/student";
 
 export const studentsApi = {
   getAll: (params?: Record<string, string | undefined>) =>
     apiClient.get<Student[]>("/students", { params }).then((r) => r.data),
 
+  getLocations: () =>
+    apiClient.get<StudentLocation[]>("/students/locations").then((r) => r.data),
+
   getById: (id: string) =>
     apiClient.get<Student>(`/students/${id}`).then((r) => r.data),
 
-  create: (data: Partial<Student>) =>
+  create: (data: StudentCreateApiBody) =>
     apiClient.post<Student>("/students", data).then((r) => r.data),
 
-  update: (id: string, data: Partial<Student>) =>
+  update: (id: string, data: StudentUpdateInput) =>
     apiClient.patch<Student>(`/students/${id}`, data).then((r) => r.data),
 
   remove: (id: string) =>

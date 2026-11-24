@@ -27,6 +27,7 @@ import {
 } from "../../components/ui/table";
 
 import { VolunteerProfileSheet } from "../../components/volunteers/VolunteerProfileSheet";
+import { sortByName } from "../../lib/utils";
 import { VolunteerForm, type VolunteerFormData } from "../../components/volunteers/VolunteerForm";
 
 import { Badge } from "../../components/ui/badge";
@@ -152,19 +153,25 @@ export default function VolunteersPage() {
   });
 
   // --- HELPERS ---
-  const filteredVolunteers = volunteers?.filter((v: Volunteer) => {
-    const name = v.name || "";
-    const email = v.email || "";
-    const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      email.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredVolunteers = sortByName(
+    (volunteers ?? []).filter((v: Volunteer) => {
+      const name = v.name || "";
+      const email = v.email || "";
+      const matchesSearch =
+        name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        email.toLowerCase().includes(searchQuery.toLowerCase());
 
-    let matchesStatus = true;
-    if (activeTab === "probation") matchesStatus = v.status === "pending";
-    if (activeTab === "active") matchesStatus = v.status === "approved";
-    if (activeTab === "inactive") matchesStatus = v.status === "inactive" || v.status === "rejected";
+      let matchesStatus = true;
+      if (activeTab === "probation") matchesStatus = v.status === "pending";
+      if (activeTab === "active") matchesStatus = v.status === "approved";
+      if (activeTab === "inactive") {
+        matchesStatus = v.status === "inactive" || v.status === "rejected";
+      }
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    }),
+    (v) => v.name,
+  );
 
   const totalPages = Math.max(1, Math.ceil((filteredVolunteers?.length || 0) / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);

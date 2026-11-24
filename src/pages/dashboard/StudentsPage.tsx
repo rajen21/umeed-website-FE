@@ -16,7 +16,13 @@ import {
 } from "../../components/students/StudentForm";
 import { StudentToolbar } from "../../components/students/StudentToolbar";
 import { StudentsDataTable } from "../../components/students/StudentsDataTable";
-import { generateStudentId, getStudentIdSequentialNumber } from "../../lib/studentConfig";
+import {
+  buildStudentCreatePayload,
+  buildStudentUpdatePayload,
+  normalizeStudentDocuments,
+  coerceString,
+} from "../../lib/studentConfig";
+import { sortByName } from "../../lib/utils";
 import type { Student } from "../../types/student";
 
 // This should optimally be in a types file or inferred from Supabase
@@ -46,26 +52,21 @@ export default function StudentsPage() {
     queryFn: () => studentsApi.getAll() as Promise<StudentExtended[]>,
   });
 
+  const { data: studentLocations = [], isLoading: locationsLoading } = useQuery({
+    queryKey: ["student-locations"],
+    queryFn: () => studentsApi.getLocations(),
+  });
+
   const createMutation = useMutation({
     mutationFn: async (student: StudentFormData) => {
-      if (!student.full_name) throw new Error("Full name is required");
+      if (!student.full_name?.trim()) throw new Error("Full name is required");
+      if (!student.gender) throw new Error("Gender is required");
       if (!student.location_code) throw new Error("Location is required");
 
-      // Find max roll number (global now)
-      let maxSeq = 0;
-      if (students) {
-        students.forEach((s) => {
-          const seq = getStudentIdSequentialNumber(s.roll_number);
-          if (seq > maxSeq) maxSeq = seq;
-        });
-      }
-
-      const newRollNumber = generateStudentId(maxSeq);
-
-      // Build insert object with only valid fields
-      // Exclude fields that might not exist in DB or have empty values
-      const insertData: Partial<StudentExtended> = {
+      const payload = buildStudentCreatePayload({
         full_name: student.full_name,
+        gender: student.gender,
+        location_code: student.location_code,
         date_of_birth: student.date_of_birth,
         school_name: student.school_name,
         class_grade: student.class_grade,
@@ -73,24 +74,13 @@ export default function StudentsPage() {
         parent_contact_number: student.parent_contact_number,
         address: student.address,
         area_locality: student.area_locality,
-        status: student.status || "active",
+        status: student.status,
         notes: student.notes,
-        location_code: student.location_code,
-        roll_number: newRollNumber,
-        documents: student.documents || [],
-      };
+        image_url: student.image_url,
+        documents: student.documents,
+      });
 
-      // Only add gender if it has a valid value (to avoid constraint errors)
-      if (student.gender && student.gender.trim() !== "") {
-        insertData.gender = student.gender;
-      }
-
-      // Only add image_url if it has a value (column might not exist)
-      if (student.image_url) {
-        insertData.image_url = student.image_url;
-      }
-
-      await studentsApi.create(insertData);
+      await studentsApi.create(payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["students"] });
@@ -109,36 +99,31 @@ export default function StudentsPage() {
   const updateMutation = useMutation({
     mutationFn: async (student: StudentFormData) => {
       if (!selectedStudent?.id) throw new Error("No student selected");
+      if (!student.full_name?.trim()) throw new Error("Full name is required");
+      if (!student.gender) throw new Error("Gender is required");
 
-      // Build update object with only valid fields
-      const updateData: Student & {location_code?: string | null, image_url?: string} = {
-        full_name: student.full_name,
-        gender: student.gender,
-        date_of_birth: student.date_of_birth,
-        school_name: student.school_name,
-        class_grade: student.class_grade,
-        parent_guardian_name: student.parent_guardian_name,
-        parent_contact_number: student.parent_contact_number,
-        address: student.address,
-        area_locality: student.area_locality,
-        status: student.status || "active",
-        notes: student.notes,
-        roll_number: student.roll_number,
-        documents: student.documents || [],
-      };
+      const payload = buildStudentUpdatePayload(
+        {
+          full_name: student.full_name,
+          gender: student.gender,
+          location_code: student.location_code,
+          date_of_birth: student.date_of_birth,
+          school_name: student.school_name,
+          class_grade: student.class_grade,
+          parent_guardian_name: student.parent_guardian_name,
+          parent_contact_number: student.parent_contact_number,
+          address: student.address,
+          area_locality: student.area_locality,
+          status: student.status,
+          notes: student.notes,
+          image_url: student.image_url,
+          documents: student.documents,
+          roll_number: student.roll_number,
+        },
+        { includeLocation: isSuperAdmin },
+      );
 
-      // Only update these if the user can edit them (super admin)
-      if (isSuperAdmin) {
-        if (student.location_code) updateData.location_code = student.location_code;
-        if (student.roll_number) updateData.roll_number = student.roll_number;
-      }
-
-      // Only add image_url if it has a value
-      if (student.image_url) {
-        updateData.image_url = student.image_url;
-      }
-
-      await studentsApi.update(selectedStudent.id, updateData);
+      await studentsApi.update(selectedStudent.id, payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["students"] });
@@ -155,20 +140,24 @@ export default function StudentsPage() {
     },
   });
 
-  const filteredStudents = students?.filter((student) => {
-    const matchesSearch =
-      student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.area_locality?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.school_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus =
-      statusFilter === "all" || student.status === statusFilter;
-    const matchesClass =
-      classFilter === "all" || student.class_grade === classFilter;
-    const matchesGender =
-      genderFilter === "all" || student.gender === genderFilter;
+  const filteredStudents = sortByName(
+    (students ?? []).filter((student) => {
+      const matchesSearch =
+        student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.area_locality?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.school_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus =
+        statusFilter === "all" || student.status === statusFilter;
+      const matchesClass =
+        classFilter === "all" || student.class_grade === classFilter;
+      const matchesGender =
+        genderFilter === "all" ||
+        student.gender?.toLowerCase() === genderFilter.toLowerCase();
 
-    return matchesSearch && matchesStatus && matchesClass && matchesGender;
-  });
+      return matchesSearch && matchesStatus && matchesClass && matchesGender;
+    }),
+    (s) => s.full_name,
+  );
 
   const uniqueClasses = [
     ...new Set(students?.map((s) => s.class_grade).filter(Boolean)),
@@ -327,24 +316,32 @@ export default function StudentsPage() {
         // Force re-mount on student change to reset form
         key={selectedStudent?.id || "new"}
         isSuperAdmin={isSuperAdmin}
+        locations={studentLocations}
+        locationsLoading={locationsLoading}
         initialData={
           selectedStudent
             ? {
               ...emptyStudent,
               ...selectedStudent,
-              // ensure non-null strings
-              full_name: selectedStudent.full_name || "",
-              gender: selectedStudent.gender || "",
-              date_of_birth: selectedStudent.date_of_birth || "",
-              school_name: selectedStudent.school_name || "",
-              class_grade: selectedStudent.class_grade || "",
-              parent_guardian_name: "",
-              notes: selectedStudent.notes || "",
-              status: selectedStudent.status,
-              image_url: selectedStudent.image_url || "",
-              location_code: selectedStudent.location_code || "",
-              roll_number: selectedStudent.roll_number || "",
-              documents: selectedStudent.documents || [],
+              full_name: coerceString(selectedStudent.full_name),
+              gender: coerceString(selectedStudent.gender),
+              date_of_birth: coerceString(selectedStudent.date_of_birth),
+              school_name: coerceString(selectedStudent.school_name),
+              class_grade: coerceString(selectedStudent.class_grade),
+              parent_guardian_name: coerceString(
+                selectedStudent.parent_guardian_name,
+              ),
+              parent_contact_number: coerceString(
+                selectedStudent.parent_contact_number,
+              ),
+              address: coerceString(selectedStudent.address),
+              area_locality: coerceString(selectedStudent.area_locality),
+              notes: coerceString(selectedStudent.notes),
+              status: selectedStudent.status || "active",
+              image_url: coerceString(selectedStudent.image_url),
+              location_code: coerceString(selectedStudent.location_code),
+              roll_number: coerceString(selectedStudent.roll_number),
+              documents: normalizeStudentDocuments(selectedStudent.documents),
             }
             : undefined
         }
